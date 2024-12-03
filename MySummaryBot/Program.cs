@@ -24,6 +24,7 @@ try
     Console.WriteLine("Bot started. Press any key to exit");
     do
     {
+        await Task.Delay(10000);
         Console.ReadLine();
     } while (true);
 
@@ -81,7 +82,7 @@ async Task<string> GetSummary(List<string> messages)
     httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
 
     var formattedMessages = string.Join("\n", messages);
-    var maxTokens = 350;
+    var maxTokens = 300;
 
     var requestBody = new
     {
