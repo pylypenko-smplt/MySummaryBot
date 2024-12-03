@@ -3,24 +3,35 @@ using System.Text;
 using System.Text.Json;
 using Telegram.Bot;
 using Telegram.Bot.Types;
-
-var token = Environment.GetEnvironmentVariable("TTOKEN");
-if (token == null)
-{
-    Console.WriteLine("Please set TTOKEN environment variable");
-    return;
-}
-
-var botClient = new TelegramBotClient(token);
 var messages = new ConcurrentDictionary<long, List<string>>();
 
-botClient.StartReceiving(
-    HandleUpdateAsync,
-    HandleErrorAsync
-);
+try
+{
+    var token = Environment.GetEnvironmentVariable("TTOKEN");
+    if (token == null)
+    {
+        Console.WriteLine("Please set TTOKEN environment variable");
+        return;
+    }
 
-Console.WriteLine("Bot started. Press any key to exit");
-Console.ReadLine();
+    var botClient = new TelegramBotClient(token);
+
+    botClient.StartReceiving(
+        HandleUpdateAsync,
+        HandleErrorAsync
+    );
+
+    Console.WriteLine("Bot started. Press any key to exit");
+    do
+    {
+        Console.ReadLine();
+    } while (true);
+
+}
+catch (Exception ex)
+{
+    Console.WriteLine(ex.Message);
+}
 
 async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
 {
@@ -70,7 +81,7 @@ async Task<string> GetSummary(List<string> messages)
     httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
 
     var formattedMessages = string.Join("\n", messages);
-    var maxTokens = 250;
+    var maxTokens = 350;
 
     var requestBody = new
     {
