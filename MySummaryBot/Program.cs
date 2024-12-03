@@ -29,7 +29,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         var chatId = update.Message.Chat.Id;
         var userName = update.Message.From?.FirstName ?? update.Message.From?.Username;
 
-        //Console.WriteLine($"Сhat id: {chatId}, User: {userName}, Message: {update.Message.Text}");
+        Console.WriteLine($"Сhat id: {chatId}, User: {userName}, Message: {update.Message.Text}");
 
         if (!messages.ContainsKey(chatId)) messages[chatId] = new List<string>();
 
@@ -70,7 +70,7 @@ async Task<string> GetSummary(List<string> messages)
     httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
 
     var formattedMessages = string.Join("\n", messages);
-    var maxTokens = 500;
+    var maxTokens = 250;
 
     var requestBody = new
     {
@@ -85,7 +85,7 @@ async Task<string> GetSummary(List<string> messages)
                     $"Make a summary of this messages in a few paragraphs. " +
                     $"Everyone should be addressed as Пан or Пані. " +
                     $"First message in batch is always a previous summary. Use it for added context, do not repeat summaries" +
-                    $"You can add a little sarcasm and passive aggression to match chats' tone. " +
+                    $"You can add a very little amount of sarcasm and very little amount of passive aggression to match chats tone. " +
                     $"Remember that your max token count is {maxTokens}. All messages in format name///message. " +
                     $"Replies are marked with [replyto///name]. " +
                     $"Messages:\n{formattedMessages}"
