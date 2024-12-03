@@ -15,8 +15,8 @@ var botClient = new TelegramBotClient(token);
 var messages = new ConcurrentDictionary<long, List<string>>();
 
 botClient.StartReceiving(
-    updateHandler: HandleUpdateAsync,
-    errorHandler: HandleErrorAsync
+    HandleUpdateAsync,
+    HandleErrorAsync
 );
 
 Console.WriteLine("Bot started. Press any key to exit");
@@ -25,15 +25,13 @@ Console.ReadLine();
 async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
 {
     if (update.Message?.Text != null)
-    {        long chatId = update.Message.Chat.Id;
+    {
+        var chatId = update.Message.Chat.Id;
         var userName = update.Message.From?.FirstName ?? update.Message.From?.Username;
 
         //Console.WriteLine($"Сhat id: {chatId}, User: {userName}, Message: {update.Message.Text}");
 
-        if (!messages.ContainsKey(chatId))
-        {
-            messages[chatId] = new List<string>();
-        }
+        if (!messages.ContainsKey(chatId)) messages[chatId] = new List<string>();
 
         if (update.Message.ReplyToMessage != null)
         {
@@ -48,7 +46,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
 
         if (update.Message.Text.StartsWith("/summary"))
         {
-            string summary = await GetSummary(messages[chatId]);
+            var summary = await GetSummary(messages[chatId]);
             await botClient.SendTextMessageAsync(chatId, summary);
 
             messages[chatId].Clear();
@@ -67,10 +65,7 @@ Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, Cancell
 async Task<string> GetSummary(List<string> messages)
 {
     var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-    if (apiKey == null)
-    {
-        throw new Exception("Please set OPENAI_API_KEY environment variable");
-    }
+    if (apiKey == null) throw new Exception("Please set OPENAI_API_KEY environment variable");
     var httpClient = new HttpClient();
     httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
 
