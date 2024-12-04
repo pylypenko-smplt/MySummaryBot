@@ -55,6 +55,9 @@ var parrotPrompt = defaultParrotPrompt;
 try
 {
     var botClient = new TelegramBotClient(token);
+    if(adminChatId != null)
+        await botClient.SendMessage(adminChatId, "Bot started");
+
     botClient.StartReceiving(
         HandleUpdateAsync,
         HandleErrorAsync
@@ -205,6 +208,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
                 "/summary_day - отримати підсумок останнього дня\n" +
                 "/question [question] - задати питання та отримати відповідь\n" +
                 "/respect - виміряти рівень поваги в чаті\n";
+            
 
             if (chatId.ToString() == adminChatId)
             {
