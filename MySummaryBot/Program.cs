@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json;
 using Telegram.Bot;
 using Telegram.Bot.Types;
-//var messages = new ConcurrentDictionary<long, List<string>>();
 var messages = new ConcurrentDictionary<long, List<MessageModel>>();
 var lastRequest = new ConcurrentDictionary<long, DateTime>();
 
@@ -60,8 +59,8 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         {
             var lastRequestTime = lastRequest.TryGetValue(chatId, out var value) ? value : DateTime.MinValue;
             var messagesForSummary = messages[chatId].Where(m => m.Timestamp > lastRequestTime).ToList();
-            var summary = await GetSummary(messages[chatId]);
-            await botClient.SendTextMessageAsync(chatId, summary);
+            var summary = await GetSummary(messagesForSummary);
+            await botClient.SendMessage(chatId, summary);
             lastRequest[chatId] = DateTime.Now;
         }
 
@@ -69,14 +68,14 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         {
             var messagesForSummary = messages[chatId].Where(m => m.Timestamp > DateTime.Now.AddHours(-1)).ToList();
             var summary = await GetSummary(messagesForSummary);
-            await botClient.SendTextMessageAsync(chatId, summary);
+            await botClient.SendMessage(chatId, summary);
         }
         
         if(update.Message.Text.StartsWith("/summary_day"))
         {
             var messagesForSummary = messages[chatId].Where(m => m.Timestamp > DateTime.Now.AddDays(-1)).ToList();
             var summary = await GetSummary(messagesForSummary);
-            await botClient.SendTextMessageAsync(chatId, summary);
+            await botClient.SendMessage(chatId, summary);
         }
         
         // if(update.Message.Text.StartsWith("/summary_week"))
@@ -90,7 +89,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         {
             var question = update.Message.Text.Replace("/question", "").Trim();
             var answer = await GetAnswer(question, userName);
-            await botClient.SendTextMessageAsync(chatId, answer);
+            await botClient.SendMessage(chatId, answer);
         }
     }
 }
@@ -122,8 +121,8 @@ async Task<string> GetSummary(List<MessageModel> messages)
             {
                 role = "user",
                 content =
-                    $"Make a summary of this messages in a few sentences or paragraphs. " +
-                    $"Everyone should be addressed as Пан or Пані. " +
+                    $"Make a summary of this messages in a few sentences or paragraphs. Try to represent content and main points of conversations instead of general vibe" +
+                    $"People should be addressed as Пан or Пані. " +
                     //$"First message in batch is always a previous summary. Use it for added context, do not repeat summaries" +
                     $"You can add a very little amount of sarcasm and very little amount of passive aggression to match chats tone. " +
                     $"Remember that your max token count is {maxTokens}. All messages in format name///message. " +
@@ -185,7 +184,8 @@ async Task<string> GetAnswer(string question, string user)
                     $"You have context from messages of this chat. " +
                     $"Answer a question from user. " +
                     $"Everyone should be addressed as Пан or Пані. " +
-                    $"Remember that your max token count is {maxTokens}. All messages in format name///message. " +
+                    $"Remember that your max token count is {maxTokens}. " +
+                    $"All messages in format name///message. " +
                     $"Replies on input are marked with [replyto///name]. Do not include [replyto///name] in answers" +
                     $"User: {user} " +
                     $"Question: {question}"
