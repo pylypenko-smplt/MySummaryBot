@@ -419,7 +419,7 @@ async Task<string> GetAnswer(MessageModel message)
 }
 
 
-async Task ClearOldMessages()
+async Task ClearOldMessages(TelegramBotClient botClient)
 {
     try
     {
@@ -431,7 +431,7 @@ async Task ClearOldMessages()
     }
     catch (Exception e)
     {
-        Console.WriteLine("Error while clearing old messages: " + e.Message);
+        await botClient.SendMessage(adminChatId, "Error: " + e.Message);
     }
 }
 
