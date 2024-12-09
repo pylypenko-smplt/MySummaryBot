@@ -34,12 +34,23 @@ var defaultSummaryPrompt =
     "Try to match chats tone when generating summary.";
 var summaryPrompt = defaultSummaryPrompt;
 
-var defaultRespectPrompt =
-    "Depending on messages measure current level of respect in chat for each user and in general. Grade respect levels on scale from 0 to 10. " +
-    "Do not include unnecessary comments about grading process but give some comments about users grades. " +
-    "Write general score first, then division by user. " +
-    "Obscene words are not signs of disrespect. " +
-    "Sort people by descending order. Correct term for respect is повага. People should be addressed as Пан or Пані. " +
+// var defaultRespectPrompt =
+//     "Depending on messages measure current level of respect in chat for each user and in general. Grade respect levels on scale from 0 to 10. " +
+//     "Do not include unnecessary comments about grading process but give some comments about users grades. " +
+//     "Write general score first, then division by user. " +
+//     "Obscene words are not signs of disrespect. " +
+//     "Sort people by descending order. Correct term for respect is повага. People should be addressed as Пан or Пані. " +
+//     "Do not show any technical information such as IDs. Do not show special symbols.";
+
+var defaultRespectPrompt = 
+    "Perform a vibe check on the users in the chat. " +
+    "Then rate the level of respect in the chat on a scale of 1 to 10. " +
+    "Good vibes are a sign of respect. " +
+    "Bad vibes are a sign of disrespect. " +
+    "People should be addressed as Пан or Пані. " +
+    "Correct term for respect is повага. " +
+    "Get total level for chat and then sort people from good vibes to bad. " +
+    "If explanation for your result is deemed needed then keep it short. Remove if possible." +
     "Do not show any technical information such as IDs. Do not show special symbols.";
 var respectPrompt = defaultRespectPrompt;
 
@@ -92,10 +103,10 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         var message = new MessageModel
         {
             MessageId = update.Message.MessageId,
-            UserId = update.Message.From.Id,
+            UserId = update.Message.From?.Id ?? 0,
             ChatId = chatId,
-            Username = update.Message.From.Username,
-            Language = update.Message.From.LanguageCode,
+            Username = update.Message.From?.Username,
+            Language = update.Message.From?.LanguageCode,
             FirstName = userName,
             Timestamp = DateTime.Now,
             Text = update.Message.Text,
@@ -211,10 +222,10 @@ async Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, C
     Console.WriteLine(exception.Message);
 }
 
-async Task<string> GetRespectLevel(List<MessageModel> messages)
+async Task<string> GetRespectLevel(List<MessageModel> messagesForRepsect)
 {
-    var formattedMessages = JsonSerializer.Serialize(messages);
-    var maxTokens = 500;
+    var formattedMessages = JsonSerializer.Serialize(messagesForRepsect);
+    var maxTokens = 1000;
 
     var requestBody = new
     {
@@ -255,14 +266,15 @@ async Task<string> GetRespectLevel(List<MessageModel> messages)
         .GetString();
 }
 
-async Task<string> GetSummary(List<MessageModel> messages)
+async Task<string> GetSummary(List<MessageModel> messagesForSummary)
 {
-    var messagesByHour = messages.GroupBy(m => m.Timestamp.Hour)
+    var messagesByHour = messagesForSummary.GroupBy(m => m.Timestamp.Hour)
         .Select(g => new { Hour = g.Key, Messages = g.ToList() })
         .ToList();
 
     var summaryByHour = new List<string>();
-    var existingSummaries = summaries[messages[0].ChatId];
+    summaries.TryGetValue(messagesForSummary[0].ChatId, out var existingSummaries);
+    existingSummaries ??= new ConcurrentDictionary<int, string>();
     foreach (var msg in messagesByHour)
     {
         if (existingSummaries.TryGetValue(msg.Hour, out var existingSummary))
