@@ -34,24 +34,26 @@ var defaultSummaryPrompt =
     "Try to match chats tone when generating summary.";
 var summaryPrompt = defaultSummaryPrompt;
 
-// var defaultRespectPrompt =
-//     "Depending on messages measure current level of respect in chat for each user and in general. Grade respect levels on scale from 0 to 10. " +
-//     "Do not include unnecessary comments about grading process but give some comments about users grades. " +
-//     "Write general score first, then division by user. " +
-//     "Obscene words are not signs of disrespect. " +
-//     "Sort people by descending order. Correct term for respect is повага. People should be addressed as Пан or Пані. " +
-//     "Do not show any technical information such as IDs. Do not show special symbols.";
-
-var defaultRespectPrompt = 
-    "Perform a vibe check on the users in the chat. " +
-    "Then rate the level of respect in the chat on a scale of 1 to 10. " +
-    "Good vibes are a sign of respect. " +
-    "Bad vibes are a sign of disrespect. " +
-    "People should be addressed as Пан or Пані. " +
-    "Correct term for respect is повага. " +
-    "Get total level for chat and then sort people from good vibes to bad. " +
-    "If explanation for your result is deemed needed then keep it short. Remove if possible." +
+var defaultRespectPrompt =
+    "Depending on messages measure current level of respect in chat for each user and in general. Grade respect levels on scale from 0 to 10. " +
+    "Do not include unnecessary comments about grading process but give some comments about users grades. " +
+    "Write general score first, then division by user. " +
+    "Obscene words are not signs of disrespect. " +
+    "Good vibes are signs of respect. " +
+    "Bad vibes are signs of disrespect. " +
+    "Sort people by descending order. Correct term for respect is повага. People should be addressed as Пан or Пані. " +
     "Do not show any technical information such as IDs. Do not show special symbols.";
+
+// var defaultRespectPrompt = 
+//     "Perform a vibe check on the users in the chat. " +
+//     "Then rate the level of respect in the chat on a scale of 1 to 10. " +
+//     "Good vibes are a sign of respect. " +
+//     "Bad vibes are a sign of disrespect. " +
+//     "People should be addressed as Пан or Пані. " +
+//     "Correct term for respect is повага. " +
+//     "Get total level for chat and then sort people from good vibes to bad. " +
+//     "If explanation for your result is deemed needed then keep it short. Remove if possible." +
+//     "Do not show any technical information such as IDs. Do not show special symbols.";
 var respectPrompt = defaultRespectPrompt;
 
 var defaultAnswerPrompt = "You have context from messages of this chat. " +
@@ -115,35 +117,67 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
 
         messages[chatId].Add(message);
 
-        if (update.Message.Text.StartsWith("/summary_hour"))
+        if (update.Message.Text.StartsWith("/підсумок_година"))
         {
             var messagesForSummary = messages[chatId].Where(m => m.Timestamp > DateTime.Now.AddHours(-1)).ToList();
             await botClient.SendMessage(chatId,
                 $"Читаю ваші {messagesForSummary.Count} повідомлень, зачекайте трохи...");
-            var summary = await GetSummaryHour(messagesForSummary);
-            await botClient.SendMessage(chatId, summary);
+            try
+            {
+                var summary = await GetSummaryHour(messagesForSummary);
+                await botClient.SendMessage(chatId, summary);
+            }
+            catch (Exception)
+            {
+                await botClient.SendMessage(chatId, "Не вдалося згенерувати підсумок, спробуйте ще раз трохи пізніше");
+                throw;
+            }
         }
-        else if (update.Message.Text.StartsWith("/summary_day"))
+        else if (update.Message.Text.StartsWith("/підсумок_день"))
         {
             var messagesForSummary = messages[chatId].Where(m => m.Timestamp > DateTime.Now.AddDays(-1)).ToList();
             await botClient.SendMessage(chatId,
                 $"Читаю ваші {messagesForSummary.Count} повідомлень, зачекайте трохи...");
-            var summary = await GetSummary(messagesForSummary);
-            await botClient.SendMessage(chatId, summary);
+            try
+            {
+                var summary = await GetSummary(messagesForSummary);
+                await botClient.SendMessage(chatId, summary);
+            }
+            catch (Exception)
+            {
+                await botClient.SendMessage(chatId, "Не вдалося згенерувати підсумок, спробуйте ще раз трохи пізніше");
+                throw;
+            }
         }
-        else if (update.Message.Text.StartsWith("/question"))
+        else if (update.Message.Text.StartsWith("/питання"))
         {
             await botClient.SendMessage(chatId, "Хмм...");
-            message.Text = message.Text.Replace("/question", "").Trim();
-            var answer = await GetAnswer(message);
-            await botClient.SendMessage(chatId, answer);
+            message.Text = message.Text.Replace("/питання", "").Trim();
+            try
+            {
+                var answer = await GetAnswer(message);
+                await botClient.SendMessage(chatId, answer);
+            }
+            catch (Exception)
+            {
+                await botClient.SendMessage(chatId, "Не вдалося згенерувати відповідь, спробуйте ще раз трохи пізніше");
+                throw;
+            }
         }
-        else if (update.Message.Text.StartsWith("/respect"))
+        else if (update.Message.Text.StartsWith("/повага"))
         {
             await botClient.SendMessage(chatId, "Вимірюю рівень поваги, зачекайте трохи...");
-            var messagesForSummary = messages[chatId].Where(m => m.Timestamp > DateTime.Now.AddHours(-6)).ToList();
-            var respect = await GetRespectLevel(messagesForSummary);
-            await botClient.SendMessage(chatId, respect);
+            var messagesForSummary = messages[chatId].Where(m => m.Timestamp > DateTime.Now.AddHours(-3)).ToList();
+            try
+            {
+                var respect = await GetRespectLevel(messagesForSummary);
+                await botClient.SendMessage(chatId, respect);
+            }
+            catch (Exception)
+            {
+                await botClient.SendMessage(chatId, "Рівень поваги не виміряно, спробуйте ще раз трохи пізніше");
+                throw;
+            }
         }
         else if (chatId.ToString() == adminChatId)
         {
@@ -191,10 +225,10 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         else if (update.Message.Text.StartsWith("/help"))
         {
             var helpMessage =
-                "/summary_hour - отримати підсумок останньої години\n" +
-                "/summary_day - отримати підсумок останнього дня\n" +
-                "/question [question] - задати питання та отримати відповідь\n" +
-                "/respect - виміряти рівень поваги в чаті\n";
+                "/підсумок_година - згенерувати підсумок за останню годину\n" +
+                "/підсумок_день - згенерувати підсумок за останні 24 годин��\n" +
+                "/питання [питання] - згенерувати відповідь на питання\n" +
+                "/повага - виміряти рівень поваги\n";
 
             if (chatId.ToString() == adminChatId)
                 helpMessage +=
@@ -286,7 +320,7 @@ async Task<string> GetSummary(List<MessageModel> messagesForSummary)
         var summary = await GetSummaryHour(msg.Messages);
         existingSummaries[msg.Hour] = summary;
         summaryByHour.Add($"Hour: {msg.Hour}\n{summary}");
-        await Task.Delay(1000);
+        await Task.Delay(5000);
     }
 
     var summaryOfSummaries = await GetSummaryOfSummaries(summaryByHour);
