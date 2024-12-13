@@ -222,7 +222,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
                 await botClient.SendMessage(chatId, "Model reset");
             }
         }
-        else if (update.Message.Text.StartsWith("/help"))
+        else if (update.Message.Text.StartsWith("/допомога"))
         {
             var helpMessage =
                 "/підсумок_година - згенерувати підсумок за останню годину\n" +
