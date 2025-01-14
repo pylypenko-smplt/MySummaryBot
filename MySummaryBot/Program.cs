@@ -28,15 +28,15 @@ var httpClient = new HttpClient();
 httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
 
 var defaultSummaryPrompt =
-    "Make a summary of this messages in a few sentences or paragraphs. Use bullet points if necessary. " +
-    "Try to represent content and main points of conversations instead of general vibe. " +
+    "Make a summary of this messages in a few sentences. Use bullet points if necessary. " +
+    "Try to represent content and main points of conversations" +
     "People should be addressed as Пан or Пані. " +
-    "Try to match chats tone when generating summary.";
+    "Do not give analysis on vibes and tones of the messages, only on the content. ";
 var summaryPrompt = defaultSummaryPrompt;
 
 var defaultRespectPrompt =
     "Depending on messages measure current level of respect in chat for each user and in general. Grade respect levels on scale from 0 to 10. " +
-    "Do not include unnecessary comments about grading process but give some comments about users grades. " +
+    "Do not include unnecessary comments about grading process but give short comments about users grades. " +
     "Write general score first, then division by user. " +
     "Obscene words are not signs of disrespect. " +
     "Good vibes are signs of respect. " +
@@ -317,7 +317,7 @@ async Task<string> GetSummary(List<MessageModel> messagesForSummary)
             continue;
         }
 
-        var summary = await GetSummaryHour(msg.Messages);
+        var summary = await GetSummaryHour(msg.Messages, true);
         existingSummaries[msg.Hour] = summary;
         summaryByHour.Add($"Hour: {msg.Hour}\n{summary}");
         await Task.Delay(5000);
@@ -327,10 +327,13 @@ async Task<string> GetSummary(List<MessageModel> messagesForSummary)
     return summaryOfSummaries;
 }
 
-async Task<string> GetSummaryHour(List<MessageModel> messages)
+async Task<string> GetSummaryHour(List<MessageModel> messages, bool forDaySummary = false)
 {
     var formattedMessages = JsonSerializer.Serialize(messages);
-    var maxTokens = 1500;
+    var maxTokens = 1000;
+
+    var prompt = forDaySummary ? "Make a bullet point summary of the messages" : systemPrompt;
+    
 
     var requestBody = new
     {
@@ -342,8 +345,8 @@ async Task<string> GetSummaryHour(List<MessageModel> messages)
             {
                 role = "user",
                 content =
-                    summaryPrompt +
-                    $"Remember that your max token count is {maxTokens}. " +
+                    prompt +
+                    $"Adjust response to fit in {maxTokens} tokens. " +
                     $"Messages:\n{formattedMessages}"
             }
         },
@@ -387,8 +390,8 @@ async Task<string> GetSummaryOfSummaries(List<string> messages)
                 role = "user",
                 content =
                     $"Combine summaries. " +
-                    $"Remember that your max token count is {maxTokens}. " +
-                    $"Messages:\n{formattedMessages}"
+                    $"Adjust response to fit in {maxTokens} tokens. " +
+                    $"Summaries:\n{formattedMessages}"
             }
         },
         max_tokens = maxTokens
@@ -418,7 +421,7 @@ async Task<string> GetSummaryOfSummaries(List<string> messages)
 
 async Task<string> GetAnswer(MessageModel message)
 {
-    var maxTokens = 500;
+    var maxTokens = 1000;
     var requestBody = new
     {
         model,
@@ -430,7 +433,7 @@ async Task<string> GetAnswer(MessageModel message)
                 role = "user",
                 content =
                     answerPrompt +
-                    $"Remember that your max token count is {maxTokens}. " +
+                    $"Adjust response to fit in {maxTokens} tokens. " +
                     $"Messages:\n{JsonSerializer.Serialize(message)}"
             }
         },
