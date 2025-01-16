@@ -93,8 +93,12 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
 {
     try
     {
-        if (update.Message?.Text == null) return;
+        if (update.Message?.Text == null) 
+            return;
 
+        if(update.Message.From?.IsBot == true)
+            return;
+        
         var chatId = update.Message.Chat.Id;
         var userName = update.Message.From?.FirstName ?? update.Message.From?.Username;
 
@@ -115,7 +119,8 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             ReplyToMessageId = update.Message.ReplyToMessage?.Id
         };
 
-        messages[chatId].Add(message);
+        if(!message.Text.StartsWith('/'))
+            messages[chatId].Add(message);
 
         if (update.Message.Text.StartsWith("/підсумок_година"))
         {
