@@ -28,8 +28,8 @@ var httpClient = new HttpClient();
 httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
 
 var defaultSummaryPrompt =
-    "Make a summary of this messages in a few sentences. Use bullet points if necessary. " +
-    "Try to represent content and main points of conversations" +
+    "Make a summary of content and themes in the conversation." +
+    "Prefer bullet-point style response." +
     "People should be addressed as Пан or Пані. " +
     "Do not give analysis on vibes and tones of the messages, only on the content. ";
 var summaryPrompt = defaultSummaryPrompt;
@@ -332,7 +332,7 @@ async Task<string> GetSummaryHour(List<MessageModel> messages, bool forDaySummar
     var formattedMessages = JsonSerializer.Serialize(messages);
     var maxTokens = 1000;
 
-    var prompt = forDaySummary ? "Make a bullet point summary of the messages" : systemPrompt;
+    var prompt = forDaySummary ? "Make a bullet point summary of the messages" : summaryPrompt;
     
 
     var requestBody = new
