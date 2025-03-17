@@ -27,22 +27,24 @@ if (string.IsNullOrEmpty(apiKey))
 var httpClient = new HttpClient();
 httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
 
-var defaultSummaryPrompt =
-    "Make a summary of content and themes in the conversation." +
-    "Prefer bullet-point style response." +
-    "People should be addressed as Пан or Пані. " +
-    "Do not give analysis on vibes and tones of the messages, only on the content. ";
+var defaultSummaryPrompt =  
+    "Provide a concise summary of the conversation, highlighting key topics and main ideas." +  
+    "Use a bullet-point format for clarity." +  
+    "Summarize information rather than listing each message individually." +  
+    "Refer to people as Пан or Пані." +  
+    "Do not analyze the tone or emotions of the messages, focus only on the content." +  
+    "If there are important conclusions, agreements, or decisions, include them explicitly.";
 var summaryPrompt = defaultSummaryPrompt;
 
-var defaultRespectPrompt =
-    "Depending on messages measure current level of respect in chat for each user and in general. Grade respect levels on scale from 0 to 10. " +
-    "Do not include unnecessary comments about grading process but give short comments about users grades. " +
-    "Write general score first, then division by user. " +
-    "Obscene words are not signs of disrespect. " +
-    "Good vibes are signs of respect. " +
-    "Bad vibes are signs of disrespect. " +
-    "Sort people by descending order. Correct term for respect is повага. People should be addressed as Пан or Пані. " +
-    "Do not show any technical information such as IDs. Do not show special symbols.";
+var defaultRespectPrompt =  
+    "Measure the current level of respect (повага) in the chat for each user and overall, based on the messages." +  
+    "Assign respect levels on a scale from 0 to 10." +  
+    "Do not include unnecessary comments about the grading process—only provide brief explanations for each user’s score." +  
+    "Start with the overall respect score, followed by individual scores sorted in descending order." +  
+    "Use Пан or Пані when addressing people." +  
+    "Obscene words do not indicate disrespect." +  
+    "Positive interactions reflect respect, while negative interactions indicate a lack of it." +  
+    "Do not display any technical details such as IDs or special symbols.";
 
 // var defaultRespectPrompt = 
 //     "Perform a vibe check on the users in the chat. " +
