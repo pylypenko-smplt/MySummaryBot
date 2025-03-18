@@ -434,7 +434,7 @@ async Task<string> GetAnswer(MessageModel message)
     var smartModel = "gpt-4o";
     var requestBody = new
     {
-        smartModel,
+        model = smartModel,
         messages = new[]
         {
             new { role = "system", content = systemPrompt },
