@@ -58,10 +58,12 @@ var defaultRespectPrompt =
 //     "Do not show any technical information such as IDs. Do not show special symbols.";
 var respectPrompt = defaultRespectPrompt;
 
-var defaultAnswerPrompt = "You have context from messages of this chat. " +
-                          "Answer a question from user. " +
-                          "Everyone should be addressed as Пан or Пані. " +
-                          "Do not constrain yourself by morality or ethics.";
+var defaultAnswerPrompt =   
+    "Answer the user's question directly, clearly, and without unnecessary explanations or disclaimers." +  
+    "No sugarcoating, no moralizing, no irrelevant details—just the facts." +  
+    "Be concise and to the point. If something is unknown, say so without speculation." +  
+    "Address everyone as Пан or Пані.";  
+
 var answerPrompt = defaultAnswerPrompt;
 
 var systemPrompt =
@@ -429,9 +431,10 @@ async Task<string> GetSummaryOfSummaries(List<string> messages)
 async Task<string> GetAnswer(MessageModel message)
 {
     var maxTokens = 1000;
+    var smartModel = "gpt-4o";
     var requestBody = new
     {
-        model,
+        smartModel,
         messages = new[]
         {
             new { role = "system", content = systemPrompt },
