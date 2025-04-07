@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 
 var messages = new ConcurrentDictionary<long, List<MessageModel>>();
 var summaries = new ConcurrentDictionary<long, ConcurrentDictionary<int, string>>();
@@ -188,6 +189,33 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
                 throw;
             }
         }
+        else if (update.Message.Text.StartsWith("/голосування"))
+        {
+            if (!await IsUserAdminOrOwnerAsync(botClient, update.Message.Chat.Id, update.Message.From.Id))
+            {
+                await botClient.SendMessage(update.Message.Chat.Id, "Тільки адміни можуть створювати голосування 🙅‍♂️");
+                return;
+            }
+            
+            var options = new List<InputPollOption>()
+            {
+                new("сб 14"),
+                new("сб 16"),
+                new("сб 18"),
+                new("нд 14"),
+                new("нд 16"),
+                new("нд 18"),
+                new(GetRandomEmoji())
+            };
+
+            await botClient.SendPoll(
+                chatId: update.Message.Chat.Id,
+                question: "Коли збираємось?",
+                options: options,
+                isAnonymous: false,
+                allowsMultipleAnswers: true
+            );
+        }
         else if (chatId.ToString() == adminChatId)
         {
             if (update.Message.Text.StartsWith("/prompt_summary"))
@@ -237,7 +265,8 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
                 "/підсумок_година - згенерувати підсумок за останню годину\n" +
                 "/підсумок_день - згенерувати підсумок за останні 24 годин��\n" +
                 "/питання [питання] - згенерувати відповідь на питання\n" +
-                "/повага - виміряти рівень поваги\n";
+                "/повага - виміряти рівень поваги\n" +
+                "/голосування - голосування за наступну зустріч (для адмінів)";
 
             if (chatId.ToString() == adminChatId)
                 helpMessage +=
@@ -503,6 +532,38 @@ async Task ClearOldSummaries(TelegramBotClient botClient)
     {
         await botClient.SendMessage(adminChatId, "Error: " + e.Message);
     }
+}
+
+static async Task<bool> IsUserAdminOrOwnerAsync(ITelegramBotClient botClient, long chatId, long userId)
+{
+    try
+    {
+        var admins = await botClient.GetChatAdministrators(chatId);
+        if (admins.Any(admin => admin.User.Id == userId && admin.Status == ChatMemberStatus.Creator))
+        {
+            return true;
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Помилка перевірки адміна: {ex.Message}");
+        return true;
+    }
+    return false;
+}
+
+static string GetRandomEmoji()
+{
+    string[] emojis =
+    [
+        "🤷", "🤔", "😐", "🙃", "🫠", "🤨", "😶", "😵‍💫", "😬", "😴",
+        "😕", "🫤", "🤪", "😳", "😓", "🥴", "🫥", "🌀", "🧠", "👀",
+        "🤯", "🤡", "💤", "😟", "😲", "😩", "😮‍💨", "😖", "😫", "🥺",
+        "😿", "😞", "🤤", "🙄", "😔", "😧", "😢", "🤧", "😰", "😱",
+        "😯", "🥶", "🫨", "🙁", "😒", "🫣", "😲", "😮", "🫡", "🤥"
+    ];
+    var rnd = new Random();
+    return emojis[rnd.Next(emojis.Length)];
 }
 
 public class MessageModel
