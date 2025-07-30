@@ -103,6 +103,7 @@ async Task RunReceivingLoop(TelegramBotClient botClient, CancellationToken token
         try
         {
             Console.WriteLine("Бот запускається...");
+            await botClient.DeleteWebhook(dropPendingUpdates: true);
             botClient.StartReceiving(
                 HandleUpdateAsync,
                 HandleErrorAsync,
