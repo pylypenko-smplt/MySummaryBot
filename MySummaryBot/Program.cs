@@ -127,7 +127,6 @@ async Task RunReceivingLoop(TelegramBotClient botClient, CancellationToken token
 
 async Task RunBackgroundLoop(TelegramBotClient botClient, CancellationToken token)
 {
-    var adminChatId = "YOUR_ADMIN_CHAT_ID"; // або бери з налаштувань
     while (!token.IsCancellationRequested)
     {
         try
@@ -145,7 +144,7 @@ async Task RunBackgroundLoop(TelegramBotClient botClient, CancellationToken toke
         {
             Console.WriteLine($"[Loop Error] {e.Message}");
             if (!string.IsNullOrEmpty(adminChatId))
-                await botClient.SendTextMessageAsync(adminChatId, $"[Loop Error] {e.Message}", cancellationToken: token);
+                await botClient.SendMessage(adminChatId, $"[Loop Error] {e.Message}", cancellationToken: token);
         }
     }
 }
