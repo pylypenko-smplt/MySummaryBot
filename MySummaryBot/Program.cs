@@ -78,30 +78,78 @@ try
     if (!string.IsNullOrEmpty(adminChatId))
         await botClient.SendMessage(adminChatId, "Bot started");
 
+    var cts = new CancellationTokenSource();
+
     botClient.StartReceiving(HandleUpdateAsync, HandleErrorAsync);
 
-    Console.WriteLine("Bot started. Press any key to exit");
-    do
-    {
-        try
-        {
-            await Task.Delay(10000);
-            await ClearOldMessages(botClient);
-            await ClearOldSummaries(botClient);
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine($"[Loop Error] {e.Message}");
-            if (!string.IsNullOrEmpty(adminChatId))
-                await botClient.SendMessage(adminChatId, $"[Loop Error] {e.Message}");
+    var receivingTask = RunReceivingLoop(botClient, cts.Token);
+    var backgroundTask = RunBackgroundLoop(botClient, cts.Token);
+    Console.WriteLine("Bot запущено. Натисніть Ctrl+C для виходу.");
 
-        }
-    } while (true);
+    await Task.WhenAny(receivingTask, backgroundTask);
+    Console.WriteLine("Одна з задач завершилася. Зупиняємо...");
+    cts.Cancel(); 
 }
 catch (Exception ex)
 {
     Console.WriteLine(ex.Message);
 }
+
+
+async Task RunReceivingLoop(TelegramBotClient botClient, CancellationToken token)
+{
+    while (!token.IsCancellationRequested)
+    {
+        try
+        {
+            Console.WriteLine("Бот запускається...");
+            botClient.StartReceiving(
+                HandleUpdateAsync,
+                HandleErrorAsync,
+                cancellationToken: token);
+
+            Console.WriteLine("Bot started. Press any key to exit");
+
+            await Task.Delay(-1, token); // очікуємо скасування
+        }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine("Отримано сигнал зупинки.");
+            break;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Receiving Error] {ex.Message}");
+            await Task.Delay(5000); // пауза перед перезапуском
+        }
+    }
+}
+
+async Task RunBackgroundLoop(TelegramBotClient botClient, CancellationToken token)
+{
+    var adminChatId = "YOUR_ADMIN_CHAT_ID"; // або бери з налаштувань
+    while (!token.IsCancellationRequested)
+    {
+        try
+        {
+            await Task.Delay(10000, token);
+            await ClearOldMessages(botClient);
+            await ClearOldSummaries(botClient);
+        }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine("Фоновий цикл зупинено.");
+            break;
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"[Loop Error] {e.Message}");
+            if (!string.IsNullOrEmpty(adminChatId))
+                await botClient.SendTextMessageAsync(adminChatId, $"[Loop Error] {e.Message}", cancellationToken: token);
+        }
+    }
+}
+
 
 async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
 {
