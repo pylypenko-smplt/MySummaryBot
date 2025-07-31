@@ -79,9 +79,6 @@ try
         await botClient.SendMessage(adminChatId, "Bot started");
 
     var cts = new CancellationTokenSource();
-
-    botClient.StartReceiving(HandleUpdateAsync, HandleErrorAsync);
-
     var receivingTask = RunReceivingLoop(botClient, cts.Token);
     var backgroundTask = RunBackgroundLoop(botClient, cts.Token);
     Console.WriteLine("Bot запущено. Натисніть Ctrl+C для виходу.");
@@ -89,10 +86,13 @@ try
     await Task.WhenAny(receivingTask, backgroundTask);
     Console.WriteLine("Одна з задач завершилася. Зупиняємо...");
     cts.Cancel(); 
+    
+    await Task.WhenAll(receivingTask, backgroundTask);
 }
 catch (Exception ex)
 {
     Console.WriteLine(ex.Message);
+    Console.WriteLine(ex.StackTrace);
 }
 
 
@@ -102,7 +102,7 @@ async Task RunReceivingLoop(TelegramBotClient botClient, CancellationToken token
     {
         try
         {
-            Console.WriteLine("Бот запускається...");
+            await botClient.SendMessage(adminChatId, "Loop started");
             await botClient.DeleteWebhook(dropPendingUpdates: true);
             botClient.StartReceiving(
                 HandleUpdateAsync,
@@ -115,7 +115,7 @@ async Task RunReceivingLoop(TelegramBotClient botClient, CancellationToken token
         }
         catch (OperationCanceledException)
         {
-            Console.WriteLine("Отримано сигнал зупинки.");
+            await botClient.SendMessage(adminChatId, "Loop stopped");
             break;
         }
         catch (Exception ex)
