@@ -104,14 +104,14 @@ async Task RunReceivingLoop(TelegramBotClient botClient, CancellationToken token
         {
             await botClient.SendMessage(adminChatId, "Loop started");
             await botClient.DeleteWebhook(dropPendingUpdates: true);
-            botClient.StartReceiving(
+            await botClient.ReceiveAsync(
                 HandleUpdateAsync,
                 HandleErrorAsync,
                 cancellationToken: token);
 
-            Console.WriteLine("Bot started. Press any key to exit");
-
-            await Task.Delay(-1, token); // очікуємо скасування
+            // Console.WriteLine("Bot started. Press any key to exit");
+            //
+            // await Task.Delay(-1, token); // очікуємо скасування
         }
         catch (OperationCanceledException)
         {
