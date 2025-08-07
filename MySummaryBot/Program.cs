@@ -183,6 +183,13 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
 
         if(!message.Text.StartsWith('/'))
             messages[chatId].Add(message);
+        
+        if(message.Text.Contains("twingo", StringComparison.InvariantCultureIgnoreCase) ||
+           message.Text.Contains("твінго", StringComparison.InvariantCultureIgnoreCase) ||
+           message.Text.Contains("твинго", StringComparison.InvariantCultureIgnoreCase))
+        {
+            await botClient.SendMessage(chatId, "MERCI TWINGO");
+        } 
 
         if (update.Message.Text.StartsWith("/підсумок_година"))
         {
