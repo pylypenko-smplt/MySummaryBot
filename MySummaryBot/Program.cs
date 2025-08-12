@@ -398,14 +398,16 @@ async Task<string> GetRespectLevel(List<MessageModel> messagesForRepsect)
         throw new HttpRequestException($"Error API: {response.StatusCode}, Details: {errorContent}");
     }
 
-    var content = await response.Content.ReadAsStringAsync();
-    var jsonResponse = JsonSerializer.Deserialize<JsonDocument>(content);
+    var rawResponse = await response.Content.ReadAsStringAsync();
+    Console.WriteLine("RAW OpenAI response:");
+    Console.WriteLine(rawResponse);
 
-    return jsonResponse.RootElement
-        .GetProperty("choices")[0]
-        .GetProperty("message")
-        .GetProperty("content")
-        .GetString();
+    var completion = JsonSerializer.Deserialize<OpenAiCompletionResponse>(rawResponse);
+    var replyText = completion?.Choices?.FirstOrDefault()?.Message?.Content?.Trim();
+    if (string.IsNullOrWhiteSpace(replyText)) 
+        replyText = "⚠️ No answer received from AI.";
+
+    return replyText;
 }
 
 async Task<string> GetSummary(List<MessageModel> messagesForSummary)
@@ -472,14 +474,13 @@ async Task<string> GetSummaryHour(List<MessageModel> messages, bool forDaySummar
         throw new HttpRequestException($"Error API: {response.StatusCode}, Details: {errorContent}");
     }
 
-    var content = await response.Content.ReadAsStringAsync();
-    var jsonResponse = JsonSerializer.Deserialize<JsonDocument>(content);
+    var rawResponse = await response.Content.ReadAsStringAsync();
+    var completion = JsonSerializer.Deserialize<OpenAiCompletionResponse>(rawResponse);
+    var replyText = completion?.Choices?.FirstOrDefault()?.Message?.Content?.Trim();
+    if (string.IsNullOrWhiteSpace(replyText)) 
+        replyText = "⚠️ No answer received from AI.";
 
-    return jsonResponse.RootElement
-        .GetProperty("choices")[0]
-        .GetProperty("message")
-        .GetProperty("content")
-        .GetString();
+    return replyText;
 }
 
 async Task<string> GetSummaryOfSummaries(List<string> messages)
@@ -516,14 +517,13 @@ async Task<string> GetSummaryOfSummaries(List<string> messages)
         throw new HttpRequestException($"Error API: {response.StatusCode}, Details: {errorContent}");
     }
 
-    var content = await response.Content.ReadAsStringAsync();
-    var jsonResponse = JsonSerializer.Deserialize<JsonDocument>(content);
+    var rawResponse = await response.Content.ReadAsStringAsync();
+    var completion = JsonSerializer.Deserialize<OpenAiCompletionResponse>(rawResponse);
+    var replyText = completion?.Choices?.FirstOrDefault()?.Message?.Content?.Trim();
+    if (string.IsNullOrWhiteSpace(replyText)) 
+        replyText = "⚠️ No answer received from AI.";
 
-    return jsonResponse.RootElement
-        .GetProperty("choices")[0]
-        .GetProperty("message")
-        .GetProperty("content")
-        .GetString();
+    return replyText;
 }
 
 
@@ -560,14 +560,13 @@ async Task<string> GetAnswer(MessageModel message)
         throw new HttpRequestException($"Error API: {response.StatusCode}, Details: {errorContent}");
     }
 
-    var content = await response.Content.ReadAsStringAsync();
-    var jsonResponse = JsonSerializer.Deserialize<JsonDocument>(content);
+    var rawResponse = await response.Content.ReadAsStringAsync();
+    var completion = JsonSerializer.Deserialize<OpenAiCompletionResponse>(rawResponse);
+    var replyText = completion?.Choices?.FirstOrDefault()?.Message?.Content?.Trim();
+    if (string.IsNullOrWhiteSpace(replyText)) 
+        replyText = "⚠️ No answer received from AI.";
 
-    return jsonResponse.RootElement
-        .GetProperty("choices")[0]
-        .GetProperty("message")
-        .GetProperty("content")
-        .GetString();
+    return replyText;
 }
 
 
@@ -673,5 +672,21 @@ public class MessageModel
     [JsonPropertyName("reply_to")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? ReplyToMessageId { get; set; }
+}
+
+public class OpenAiCompletionResponse
+{
+    public List<Choice> Choices { get; set; }
+}
+
+public class Choice
+{
+    public Message Message { get; set; }
+}
+
+public class Message
+{
+    public string Role { get; set; }
+    public string Content { get; set; }
 }
 
