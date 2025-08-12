@@ -384,7 +384,7 @@ async Task<string> GetRespectLevel(List<MessageModel> messagesForRepsect)
                     $"Messages:\n{formattedMessages}"
             }
         },
-        max_tokens = maxTokens
+        max_completion_tokens = maxTokens
     };
 
     var response = await httpClient.PostAsync(
@@ -458,7 +458,7 @@ async Task<string> GetSummaryHour(List<MessageModel> messages, bool forDaySummar
                     $"Messages:\n{formattedMessages}"
             }
         },
-        max_tokens = maxTokens
+        max_completion_tokens = maxTokens
     };
 
     var response = await httpClient.PostAsync(
@@ -502,7 +502,7 @@ async Task<string> GetSummaryOfSummaries(List<string> messages)
                     $"Summaries:\n{formattedMessages}"
             }
         },
-        max_tokens = maxTokens
+        max_completion_tokens = maxTokens
     };
 
     var response = await httpClient.PostAsync(
@@ -546,7 +546,7 @@ async Task<string> GetAnswer(MessageModel message)
                     $"Messages:\n{JsonSerializer.Serialize(message)}"
             }
         },
-        max_tokens = maxTokens
+        max_completion_tokens = maxTokens
     };
 
     var response = await httpClient.PostAsync(
