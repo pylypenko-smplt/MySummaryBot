@@ -387,26 +387,7 @@ async Task<string> GetRespectLevel(List<MessageModel> messagesForRepsect)
         max_completion_tokens = maxTokens
     };
 
-    var response = await httpClient.PostAsync(
-        "https://api.openai.com/v1/chat/completions",
-        new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json")
-    );
-
-    if (!response.IsSuccessStatusCode)
-    {
-        var errorContent = await response.Content.ReadAsStringAsync();
-        throw new HttpRequestException($"Error API: {response.StatusCode}, Details: {errorContent}");
-    }
-
-    var rawResponse = await response.Content.ReadAsStringAsync();
-    Console.WriteLine("RAW OpenAI response:");
-    Console.WriteLine(rawResponse);
-
-    var completion = JsonSerializer.Deserialize<OpenAiCompletionResponse>(rawResponse);
-    var replyText = completion?.Choices?.FirstOrDefault()?.Message?.Content?.Trim();
-    if (string.IsNullOrWhiteSpace(replyText)) 
-        replyText = "⚠️ No answer received from AI.";
-
+    var replyText = await MakeApiRequest(requestBody);
     return replyText;
 }
 
@@ -463,23 +444,7 @@ async Task<string> GetSummaryHour(List<MessageModel> messages, bool forDaySummar
         max_completion_tokens = maxTokens
     };
 
-    var response = await httpClient.PostAsync(
-        "https://api.openai.com/v1/chat/completions",
-        new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json")
-    );
-
-    if (!response.IsSuccessStatusCode)
-    {
-        var errorContent = await response.Content.ReadAsStringAsync();
-        throw new HttpRequestException($"Error API: {response.StatusCode}, Details: {errorContent}");
-    }
-
-    var rawResponse = await response.Content.ReadAsStringAsync();
-    var completion = JsonSerializer.Deserialize<OpenAiCompletionResponse>(rawResponse);
-    var replyText = completion?.Choices?.FirstOrDefault()?.Message?.Content?.Trim();
-    if (string.IsNullOrWhiteSpace(replyText)) 
-        replyText = "⚠️ No answer received from AI.";
-
+    var replyText = await MakeApiRequest(requestBody);
     return replyText;
 }
 
@@ -506,23 +471,7 @@ async Task<string> GetSummaryOfSummaries(List<string> messages)
         max_completion_tokens = maxTokens
     };
 
-    var response = await httpClient.PostAsync(
-        "https://api.openai.com/v1/chat/completions",
-        new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json")
-    );
-
-    if (!response.IsSuccessStatusCode)
-    {
-        var errorContent = await response.Content.ReadAsStringAsync();
-        throw new HttpRequestException($"Error API: {response.StatusCode}, Details: {errorContent}");
-    }
-
-    var rawResponse = await response.Content.ReadAsStringAsync();
-    var completion = JsonSerializer.Deserialize<OpenAiCompletionResponse>(rawResponse);
-    var replyText = completion?.Choices?.FirstOrDefault()?.Message?.Content?.Trim();
-    if (string.IsNullOrWhiteSpace(replyText)) 
-        replyText = "⚠️ No answer received from AI.";
-
+    var replyText = await MakeApiRequest(requestBody);
     return replyText;
 }
 
@@ -549,23 +498,7 @@ async Task<string> GetAnswer(MessageModel message)
         max_completion_tokens = maxTokens
     };
 
-    var response = await httpClient.PostAsync(
-        "https://api.openai.com/v1/chat/completions",
-        new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json")
-    );
-
-    if (!response.IsSuccessStatusCode)
-    {
-        var errorContent = await response.Content.ReadAsStringAsync();
-        throw new HttpRequestException($"Error API: {response.StatusCode}, Details: {errorContent}");
-    }
-
-    var rawResponse = await response.Content.ReadAsStringAsync();
-    var completion = JsonSerializer.Deserialize<OpenAiCompletionResponse>(rawResponse);
-    var replyText = completion?.Choices?.FirstOrDefault()?.Message?.Content?.Trim();
-    if (string.IsNullOrWhiteSpace(replyText)) 
-        replyText = "⚠️ No answer received from AI.";
-
+    var replyText = await MakeApiRequest(requestBody);
     return replyText;
 }
 
@@ -649,6 +582,28 @@ static string GetRandomEmoji()
     ];
     var rnd = new Random();
     return emojis[rnd.Next(emojis.Length)];
+}
+
+async Task<string> MakeApiRequest(object request)
+{
+    var response = await httpClient.PostAsync(
+        "https://api.openai.com/v1/chat/completions",
+        new StringContent(JsonSerializer.Serialize(request), Encoding.UTF8, "application/json")
+    );
+
+    if (!response.IsSuccessStatusCode)
+    {
+        var errorContent = await response.Content.ReadAsStringAsync();
+        throw new HttpRequestException($"Error API: {response.StatusCode}, Details: {errorContent}");
+    }
+
+    var rawResponse = await response.Content.ReadAsStringAsync();
+    var completion = JsonSerializer.Deserialize<OpenAiCompletionResponse>(rawResponse);
+    var resp = completion?.Choices?.FirstOrDefault()?.Message?.Content?.Trim();
+    if (string.IsNullOrWhiteSpace(resp))
+        throw new Exception("Empty response from OpenAI API. Raw response: " + rawResponse);
+
+    return resp;
 }
 
 public class MessageModel
