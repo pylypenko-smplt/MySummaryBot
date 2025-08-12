@@ -348,7 +348,7 @@ async Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, C
 async Task<string> GetRespectLevel(List<MessageModel> messagesForRepsect)
 {
     var formattedMessages = JsonSerializer.Serialize(messagesForRepsect);
-    var maxTokens = 1500;
+    var maxTokens = 5000;
 
     var requestBody = new
     {
@@ -402,7 +402,7 @@ async Task<string> GetSummary(List<MessageModel> messagesForSummary)
 async Task<string> GetSummaryHour(List<MessageModel> messages, bool forDaySummary = false)
 {
     var formattedMessages = JsonSerializer.Serialize(messages);
-    var maxTokens = 1000;
+    var maxTokens = 5000;
 
     var prompt = forDaySummary ? "Make a bullet point summary of the messages" : summaryPrompt;
     
@@ -432,7 +432,7 @@ async Task<string> GetSummaryHour(List<MessageModel> messages, bool forDaySummar
 async Task<string> GetSummaryOfSummaries(List<string> messages)
 {
     var formattedMessages = JsonSerializer.Serialize(messages);
-    var maxTokens = 3000;
+    var maxTokens = 6000;
 
     var requestBody = new
     {
@@ -459,7 +459,7 @@ async Task<string> GetSummaryOfSummaries(List<string> messages)
 
 async Task<string> GetAnswer(MessageModel message)
 {
-    var maxTokens = 1000;
+    var maxTokens = 5000;
     var smartModel = "gpt-5";
     var requestBody = new
     {
