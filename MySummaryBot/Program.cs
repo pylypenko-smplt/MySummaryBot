@@ -674,3 +674,4 @@ public class MessageModel
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? ReplyToMessageId { get; set; }
 }
+
