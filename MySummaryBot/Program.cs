@@ -593,8 +593,8 @@ async Task<string> MakeApiRequest(object request)
 
     var promptTokens = completion?.Usage?.PromptTokens ?? 0m;
     var completionTokens = completion?.Usage?.CompletionTokens ?? 0m;
-    var cost = (promptTokens * inputPricePerToken) + (completionTokens * outputPricePerToken);
-    resp += $"\n\n*Витрачено: ${cost:C2}*";
+    var cost = (promptTokens * inputPricePerToken) + (completionTokens * outputPricePerToken) * 41.50m;
+    resp += $"\n\n*Витрачено: {cost:F2} грн*";
     return resp;
 }
 
