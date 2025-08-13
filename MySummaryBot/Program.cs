@@ -584,6 +584,17 @@ async Task<string> MakeApiRequest(object request)
     if (string.IsNullOrWhiteSpace(resp))
         throw new Exception("Empty response from OpenAI API. Raw response: " + rawResponse);
 
+    (var inputPricePerToken, var outputPricePerToken) = completion?.Model switch
+    {
+        "gpt-5"       => (0.00000125m, 0.00001m),
+        "gpt-5-mini"  => (0.00000025m, 0.000002m),
+        _             => (0.00000125m, 0.00001m) 
+    };
+
+    var promptTokens = completion?.Usage?.PromptTokens ?? 0m;
+    var completionTokens = completion?.Usage?.CompletionTokens ?? 0m;
+    var cost = (promptTokens * inputPricePerToken) + (completionTokens * outputPricePerToken);
+    resp += $"\n\n*Витрачено: {cost:C2}*";
     return resp;
 }
 
@@ -615,7 +626,12 @@ public class OpenAiCompletionResponse
 {
     [JsonPropertyName("choices")]
     public List<Choice> Choices { get; set; }
+    
+    [JsonPropertyName("usage")]
+    public Usage Usage { get; set; }
 
+    [JsonPropertyName("model")]
+    public string Model { get; set; }
 }
 
 public class Choice
@@ -628,4 +644,16 @@ public class Message
 {
     [JsonPropertyName("content")]
     public string Content { get; set; }
+}
+
+public class Usage
+{
+    [JsonPropertyName("prompt_tokens")]
+    public int PromptTokens { get; set; }
+
+    [JsonPropertyName("completion_tokens")]
+    public int CompletionTokens { get; set; }
+
+    [JsonPropertyName("total_tokens")]
+    public int TotalTokens { get; set; }
 }
