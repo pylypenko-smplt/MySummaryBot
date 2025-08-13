@@ -584,7 +584,7 @@ async Task<string> MakeApiRequest(object request)
     if (string.IsNullOrWhiteSpace(resp))
         throw new Exception("Empty response from OpenAI API. Raw response: " + rawResponse);
 
-    (var inputPricePerToken, var outputPricePerToken) = completion?.Model switch
+    var (inputPricePerToken, outputPricePerToken) = completion?.Model switch
     {
         "gpt-5"       => (0.00000125m, 0.00001m),
         "gpt-5-mini"  => (0.00000025m, 0.000002m),
@@ -594,7 +594,7 @@ async Task<string> MakeApiRequest(object request)
     var promptTokens = completion?.Usage?.PromptTokens ?? 0m;
     var completionTokens = completion?.Usage?.CompletionTokens ?? 0m;
     var cost = (promptTokens * inputPricePerToken) + (completionTokens * outputPricePerToken);
-    resp += $"\n\n*Витрачено: {cost:C2}*";
+    resp += $"\n\n*Витрачено: ${cost:C2}*";
     return resp;
 }
 
