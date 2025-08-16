@@ -139,6 +139,22 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
     {
         if (update.Message?.Text == null) 
             return;
+        
+        if((update.Message.Text.Contains("twingo", StringComparison.InvariantCultureIgnoreCase) ||
+            update.Message.Text.Contains("твінго", StringComparison.InvariantCultureIgnoreCase) ||
+            update.Message.Text.Contains("твинго", StringComparison.InvariantCultureIgnoreCase)) &&
+            !update.Message.Text.Contains("merci", StringComparison.InvariantCultureIgnoreCase))
+        {
+            await botClient.SendMessage(update.Message.Chat.Id, "MERCI TWINGO");
+        } 
+        
+        if((update.Message.Text.Contains("lanos", StringComparison.InvariantCultureIgnoreCase) ||
+            update.Message.Text.Contains("ланос", StringComparison.InvariantCultureIgnoreCase)) &&
+           !update.Message.Text.Contains("holy", StringComparison.InvariantCultureIgnoreCase))
+        {
+            await botClient.SendMessage(update.Message.Chat.Id, "HOLY LANOS");
+        } 
+
 
         if(update.Message.From?.IsBot == true)
             return;
@@ -165,13 +181,6 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
 
         if(!message.Text.StartsWith('/'))
             messages[chatId].Add(message);
-        
-        if(message.Text.Contains("twingo", StringComparison.InvariantCultureIgnoreCase) ||
-           message.Text.Contains("твінго", StringComparison.InvariantCultureIgnoreCase) ||
-           message.Text.Contains("твинго", StringComparison.InvariantCultureIgnoreCase))
-        {
-            await botClient.SendMessage(chatId, "MERCI TWINGO");
-        } 
 
         if (update.Message.Text.StartsWith("/підсумок_година"))
         {
