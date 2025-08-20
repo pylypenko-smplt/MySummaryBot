@@ -35,10 +35,13 @@ const string defaultSummaryPrompt =
     "Ignore tone or emotions; focus on content.";
 
 const string defaultRespectPrompt =
-    "Evaluate the level of respect (повага) in the chat: first overall score (0–10), then each user sorted by score (desc)." +
-    "Format: Пан/Пані Name (username): score, reasoning." +
-    "Obscene words ≠ disrespect. Positive interactions raise score, negative lower it." +
-    "No technical details (IDs, symbols).";
+    "Evaluate the vibe level (good vibes = high повага, bad vibes = low повага) in the chat on a 0–10 scale. " +
+    "First provide the overall score, then list each user sorted by score (descending). " +
+    "Format strictly as: Пан/Пані/Паньство Name (username): score, short reasoning. " +
+    "Use Пан for men, Пані for women, and Паньство if gender is unknown. " +
+    "Obscene words and playful teasing are normal in informal chats and do not automatically reduce повага. " +
+    "Explanations must be short, factual, and per-user only — no general commentary or meta-analysis.";
+
 
 const string defaultAnswerPrompt =
     "Answer directly and concisely, without extra explanations or disclaimers." +
