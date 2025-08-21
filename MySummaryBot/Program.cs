@@ -443,28 +443,29 @@ async Task<string> GetSummaryHour(List<MessageModel> messages, bool forDaySummar
 
 async Task<string> GetSummaryOfSummaries(List<string> messages)
 {
-    var formattedMessages = JsonSerializer.Serialize(messages);
-    var maxTokens = 6000;
-
-    var requestBody = new
-    {
-        model,
-        messages = new[]
-        {
-            new { role = "system", content = systemPrompt },
-            new
-            {
-                role = "user",
-                content =
-                    $"Combine summaries. " +
-                    $"Adjust response to fit in {maxTokens} tokens. " +
-                    $"Summaries:\n{formattedMessages}"
-            }
-        },
-        max_completion_tokens = maxTokens
-    };
-
-    var replyText = await MakeApiRequest(requestBody);
+    // var formattedMessages = JsonSerializer.Serialize(messages);
+    // var maxTokens = 6000;
+    //
+    // var requestBody = new
+    // {
+    //     model,
+    //     messages = new[]
+    //     {
+    //         new { role = "system", content = systemPrompt },
+    //         new
+    //         {
+    //             role = "user",
+    //             content =
+    //                 $"Combine summaries. " +
+    //                 $"Adjust response to fit in {maxTokens} tokens. " +
+    //                 $"Summaries:\n{formattedMessages}"
+    //         }
+    //     },
+    //     max_completion_tokens = maxTokens
+    // };
+    //
+    // var replyText = await MakeApiRequest(requestBody);
+    var replyText = string.Join("\n\n", messages);
     return replyText;
 }
 
