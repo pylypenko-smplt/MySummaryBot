@@ -37,8 +37,8 @@ const string defaultSummaryPrompt =
 const string defaultRespectPrompt =
     "Evaluate the vibe level (good vibes = high повага, bad vibes = low повага) in the chat on a 0–10 scale. " +
     "First provide the overall score, then list each user sorted by score (descending). " +
-    "Format strictly as: Пан/Пані/Паньство Name (username): score, short reasoning. " +
-    "Use Пан for men, Пані for women, and Паньство if gender is unknown. " +
+    "Format strictly as: Пан/Пані/Паніні Name (username): score, short reasoning. " +
+    "Use Пан for men, Пані for women, and Паніні if gender is unknown. " +
     "Obscene words and playful teasing are normal in informal chats and do not automatically reduce повага. " +
     "Explanations must be short, factual, and per-user only — no general commentary or meta-analysis.";
 
