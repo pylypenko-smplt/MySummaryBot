@@ -154,9 +154,9 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         if (update.Message.Text.Contains("магнітол", StringComparison.InvariantCultureIgnoreCase) ||
             update.Message.Text.Contains("поставка", StringComparison.InvariantCultureIgnoreCase) ||
             update.Message.Text.Contains("надходжен", StringComparison.InvariantCultureIgnoreCase) ||
-            update.Message.Text.Contains("магнітола", StringComparison.InvariantCultureIgnoreCase) ||
-            update.Message.Text.Contains("магнітоли", StringComparison.InvariantCultureIgnoreCase))
-            await botClient.SendMessage(update.Message.Chat.Id, "СЛИШ @Et_tu_Bruh ПОРА КУПОВАТИ МАГНІТОЛУ");
+            update.Message.Text.Contains("магнітол", StringComparison.InvariantCultureIgnoreCase) ||
+            update.Message.Text.Contains("магнитол", StringComparison.InvariantCultureIgnoreCase))
+            await botClient.SendMessage(update.Message.Chat.Id, "СЛИШ @Et_tu_Bruh НАСТАВ ЧАС КУПУВАТИ МАГНІТОЛУ");
 
         if (update.Message.From?.IsBot == true)
             return;
