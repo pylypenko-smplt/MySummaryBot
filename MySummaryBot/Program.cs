@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -151,12 +151,12 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             await botClient.SendMessage(update.Message.Chat.Id, "HOLY LANOS");
 
 
-        if (update.Message.Text.Contains("магнітол", StringComparison.InvariantCultureIgnoreCase) ||
-            update.Message.Text.Contains("поставка", StringComparison.InvariantCultureIgnoreCase) ||
-            update.Message.Text.Contains("надходжен", StringComparison.InvariantCultureIgnoreCase) ||
-            update.Message.Text.Contains("магнітол", StringComparison.InvariantCultureIgnoreCase) ||
-            update.Message.Text.Contains("магнитол", StringComparison.InvariantCultureIgnoreCase))
-            await botClient.SendMessage(update.Message.Chat.Id, "СЛИШ @Et_tu_Bruh НАСТАВ ЧАС КУПУВАТИ МАГНІТОЛУ");
+        //if (update.Message.Text.Contains("магнітол", StringComparison.InvariantCultureIgnoreCase) ||
+            //update.Message.Text.Contains("поставка", StringComparison.InvariantCultureIgnoreCase) ||
+            //update.Message.Text.Contains("надходжен", StringComparison.InvariantCultureIgnoreCase) ||
+            //update.Message.Text.Contains("магнітол", StringComparison.InvariantCultureIgnoreCase) ||
+            //update.Message.Text.Contains("магнитол", StringComparison.InvariantCultureIgnoreCase))
+            //await botClient.SendMessage(update.Message.Chat.Id, "СЛИШ @Et_tu_Bruh НАСТАВ ЧАС КУПУВАТИ МАГНІТОЛУ");
 
         if (update.Message.From?.IsBot == true)
             return;
