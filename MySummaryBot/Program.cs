@@ -149,14 +149,11 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
              update.Message.Text.Contains("ланос", StringComparison.InvariantCultureIgnoreCase)) &&
             !update.Message.Text.Contains("holy", StringComparison.InvariantCultureIgnoreCase))
             await botClient.SendMessage(update.Message.Chat.Id, "HOLY LANOS");
-
-
-        //if (update.Message.Text.Contains("магнітол", StringComparison.InvariantCultureIgnoreCase) ||
-            //update.Message.Text.Contains("поставка", StringComparison.InvariantCultureIgnoreCase) ||
-            //update.Message.Text.Contains("надходжен", StringComparison.InvariantCultureIgnoreCase) ||
-            //update.Message.Text.Contains("магнітол", StringComparison.InvariantCultureIgnoreCase) ||
-            //update.Message.Text.Contains("магнитол", StringComparison.InvariantCultureIgnoreCase))
-            //await botClient.SendMessage(update.Message.Chat.Id, "СЛИШ @Et_tu_Bruh НАСТАВ ЧАС КУПУВАТИ МАГНІТОЛУ");
+        
+        if (update.Message.Text.Contains("сенс", StringComparison.InvariantCultureIgnoreCase))
+            await botClient.SendMessage(update.Message.Chat.Id, update.Message.Text.Replace("сенс", "ланос", StringComparison.InvariantCultureIgnoreCase));
+        if (update.Message.Text.Contains("sens", StringComparison.InvariantCultureIgnoreCase))
+            await botClient.SendMessage(update.Message.Chat.Id, update.Message.Text.Replace("sens", "lanos", StringComparison.InvariantCultureIgnoreCase));
 
         if (update.Message.From?.IsBot == true)
             return;
