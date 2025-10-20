@@ -144,7 +144,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             MessageId = update.Message.MessageId,
         };
         
-        if (update.Message.Text.Split(' ').Any(t => t.Length > 100))
+        if (!update.Message.Text.Contains("http") && update.Message.Text.Split(' ').Any(t => t.Length > 100))
         {
             await botClient.SendMessage(update.Message.Chat.Id, "Друже, ти дурачок?", replyParameters: replyParams);
             return;
