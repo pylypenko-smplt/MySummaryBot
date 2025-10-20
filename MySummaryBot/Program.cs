@@ -139,22 +139,33 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         if (update.Message?.Text == null)
             return;
 
+        var replyParams = new ReplyParameters()
+        {
+            MessageId = update.Message.MessageId,
+        };
+        
+        if (update.Message.Text.Split(' ').Any(t => t.Length > 100))
+        {
+            await botClient.SendMessage(update.Message.Chat.Id, "Друже, ти дурачок?", replyParameters: replyParams);
+            return;
+        }
+        
         if ((update.Message.Text.Contains("twingo", StringComparison.InvariantCultureIgnoreCase) ||
              update.Message.Text.Contains("твінго", StringComparison.InvariantCultureIgnoreCase) ||
              update.Message.Text.Contains("твинго", StringComparison.InvariantCultureIgnoreCase)) &&
             !update.Message.Text.Contains("merci", StringComparison.InvariantCultureIgnoreCase))
-            await botClient.SendMessage(update.Message.Chat.Id, "MERCI TWINGO");
+            await botClient.SendMessage(update.Message.Chat.Id, "MERCI TWINGO", replyParameters: replyParams);
 
         if ((update.Message.Text.Contains("lanos", StringComparison.InvariantCultureIgnoreCase) ||
              update.Message.Text.Contains("ланос", StringComparison.InvariantCultureIgnoreCase)) &&
             !update.Message.Text.Contains("holy", StringComparison.InvariantCultureIgnoreCase))
-            await botClient.SendMessage(update.Message.Chat.Id, "HOLY LANOS");
+            await botClient.SendMessage(update.Message.Chat.Id, "HOLY LANOS", replyParameters: replyParams);
         
         if (update.Message.Text.Contains("сенс", StringComparison.InvariantCultureIgnoreCase))
-            await botClient.SendMessage(update.Message.Chat.Id, update.Message.Text.Replace("сенс", "ланос", StringComparison.InvariantCultureIgnoreCase));
+            await botClient.SendMessage(update.Message.Chat.Id, update.Message.Text.Replace("сенс", "ланос", StringComparison.InvariantCultureIgnoreCase), replyParameters: replyParams);
         if (update.Message.Text.Contains("sens", StringComparison.InvariantCultureIgnoreCase))
-            await botClient.SendMessage(update.Message.Chat.Id, update.Message.Text.Replace("sens", "lanos", StringComparison.InvariantCultureIgnoreCase));
-
+            await botClient.SendMessage(update.Message.Chat.Id, update.Message.Text.Replace("sens", "lanos", StringComparison.InvariantCultureIgnoreCase), replyParameters: replyParams);
+        
         if (update.Message.From?.IsBot == true)
             return;
 
@@ -205,7 +216,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             try
             {
                 var summary = await GetSummary(messagesForSummary);
-                await botClient.SendMessage(chatId, summary);
+                await botClient.SendMessage(chatId, summary, replyParameters: replyParams);
             }
             catch (Exception)
             {
@@ -217,10 +228,17 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         {
             await botClient.SendMessage(chatId, "Хмм...");
             message.Text = message.Text.Replace("/питання", "").Trim();
+
+            if (update.Message.ReplyToMessage != null)
+            {
+                message.Text +=
+                    $"\n\nReply in context:\n{update.Message.ReplyToMessage.Text}";
+            }
+            
             try
             {
                 var answer = await GetAnswer(message);
-                await botClient.SendMessage(chatId, answer);
+                await botClient.SendMessage(chatId, answer, replyParameters: replyParams);
             }
             catch (Exception)
             {
@@ -235,7 +253,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             try
             {
                 var respect = await GetRespectLevel(messagesForSummary);
-                await botClient.SendMessage(chatId, respect);
+                await botClient.SendMessage(chatId, respect, replyParameters: replyParams);
             }
             catch (Exception)
             {
