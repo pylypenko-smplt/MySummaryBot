@@ -28,6 +28,8 @@ if (string.IsNullOrEmpty(apiKey))
 var httpClient = new HttpClient();
 httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
 
+var rnd = new Random();
+
 const string defaultSummaryPrompt =
     "Summarize the conversation in bullet points, focusing only on key topics, main ideas, and important decisions or agreements." +
     "Do not list each message separately." +
@@ -191,6 +193,9 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
 
         if (!message.Text.StartsWith('/'))
             messages[chatId].Add(message);
+        
+        if (rnd.Next(0, 1000) == 0)
+            await botClient.SendMessage(chatId, "Друже, ти дурачок?", replyParameters: replyParams);
 
         if (update.Message.Text.StartsWith("/підсумок_година"))
         {
