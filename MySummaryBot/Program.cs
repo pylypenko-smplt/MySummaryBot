@@ -27,6 +27,7 @@ if (string.IsNullOrEmpty(apiKey))
 
 var httpClient = new HttpClient();
 httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+httpClient.Timeout = TimeSpan.FromMinutes(10);
 
 var rnd = new Random();
 
