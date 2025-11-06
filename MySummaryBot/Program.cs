@@ -152,25 +152,6 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             await botClient.SendMessage(update.Message.Chat.Id, "Друже, ти дурачок?", replyParameters: replyParams);
             return;
         }
-        
-        if ((update.Message.Text.Contains("twingo", StringComparison.InvariantCultureIgnoreCase) ||
-             update.Message.Text.Contains("твінго", StringComparison.InvariantCultureIgnoreCase) ||
-             update.Message.Text.Contains("твинго", StringComparison.InvariantCultureIgnoreCase)) &&
-            !update.Message.Text.Contains("merci", StringComparison.InvariantCultureIgnoreCase))
-            await botClient.SendMessage(update.Message.Chat.Id, "MERCI TWINGO", replyParameters: replyParams);
-
-        if ((update.Message.Text.Contains("lanos", StringComparison.InvariantCultureIgnoreCase) ||
-             update.Message.Text.Contains("ланос", StringComparison.InvariantCultureIgnoreCase)) &&
-            !update.Message.Text.Contains("holy", StringComparison.InvariantCultureIgnoreCase))
-            await botClient.SendMessage(update.Message.Chat.Id, "HOLY LANOS", replyParameters: replyParams);
-        
-        if (update.Message.Text.Contains("сенс", StringComparison.InvariantCultureIgnoreCase))
-            await botClient.SendMessage(update.Message.Chat.Id, update.Message.Text.Replace("сенс", "ланос", StringComparison.InvariantCultureIgnoreCase), replyParameters: replyParams);
-        if (update.Message.Text.Contains("sens", StringComparison.InvariantCultureIgnoreCase))
-            await botClient.SendMessage(update.Message.Chat.Id, update.Message.Text.Replace("sens", "lanos", StringComparison.InvariantCultureIgnoreCase), replyParameters: replyParams);
-        
-        if (update.Message.From?.IsBot == true)
-            return;
 
         var chatId = update.Message.Chat.Id;
         var userName = update.Message.From?.FirstName ?? update.Message.From?.Username;
@@ -180,6 +161,9 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
 
         if (!messages.ContainsKey(chatId)) messages[chatId] = new List<MessageModel>();
 
+        if (update.Message.From?.IsBot == true)
+            return;
+        
         var message = new MessageModel
         {
             MessageId = update.Message.MessageId,
@@ -198,7 +182,26 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         
         if (rnd.Next(0, 1000) == 0)
             await botClient.SendMessage(chatId, "Друже, ти дурачок?", replyParameters: replyParams);
+        
+        if(userId == 5612311136)
+            return;
+        
+        if ((update.Message.Text.Contains("twingo", StringComparison.InvariantCultureIgnoreCase) ||
+             update.Message.Text.Contains("твінго", StringComparison.InvariantCultureIgnoreCase) ||
+             update.Message.Text.Contains("твинго", StringComparison.InvariantCultureIgnoreCase)) &&
+            !update.Message.Text.Contains("merci", StringComparison.InvariantCultureIgnoreCase))
+            await botClient.SendMessage(update.Message.Chat.Id, "MERCI TWINGO", replyParameters: replyParams);
 
+        if ((update.Message.Text.Contains("lanos", StringComparison.InvariantCultureIgnoreCase) ||
+             update.Message.Text.Contains("ланос", StringComparison.InvariantCultureIgnoreCase)) &&
+            !update.Message.Text.Contains("holy", StringComparison.InvariantCultureIgnoreCase))
+            await botClient.SendMessage(update.Message.Chat.Id, "HOLY LANOS", replyParameters: replyParams);
+        
+        if (update.Message.Text.Contains("сенс", StringComparison.InvariantCultureIgnoreCase))
+            await botClient.SendMessage(update.Message.Chat.Id, update.Message.Text.Replace("сенс", "ланос", StringComparison.InvariantCultureIgnoreCase), replyParameters: replyParams);
+        if (update.Message.Text.Contains("sens", StringComparison.InvariantCultureIgnoreCase))
+            await botClient.SendMessage(update.Message.Chat.Id, update.Message.Text.Replace("sens", "lanos", StringComparison.InvariantCultureIgnoreCase), replyParameters: replyParams);
+        
         if (update.Message.Text.StartsWith("/підсумок_година"))
         {
             var messagesForSummary = messages[chatId].Where(m => m.Timestamp > DateTime.Now.AddHours(-1)).ToList();
