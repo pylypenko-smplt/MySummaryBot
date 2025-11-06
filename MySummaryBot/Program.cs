@@ -174,8 +174,9 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
 
         var chatId = update.Message.Chat.Id;
         var userName = update.Message.From?.FirstName ?? update.Message.From?.Username;
+        var userId = update.Message.From?.Id ?? 0;
 
-        Console.WriteLine($"Сhat id: {chatId}, User: {userName}, Message: {update.Message.Text}");
+        Console.WriteLine($"Сhat id: {chatId}, User: {userName} | {userId}, Message: {update.Message.Text}");
 
         if (!messages.ContainsKey(chatId)) messages[chatId] = new List<MessageModel>();
 
