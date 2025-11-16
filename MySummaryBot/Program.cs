@@ -226,7 +226,20 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             try
             {
                 var summary = await GetSummary(messagesForSummary);
-                await botClient.SendMessage(chatId, summary, replyParameters: replyParams);
+                if(summary.Length < 4096)
+                    await botClient.SendMessage(chatId, summary, replyParameters: replyParams);
+                else
+                {
+                    var parts = summary.Select((x, i) => new { Index = i, Value = x })
+                        .GroupBy(x => x.Index / 4000)
+                        .Select(g => string.Join("", g.Select(x => x.Value)))
+                        .ToList();
+                    foreach (var part in parts)
+                    {
+                        await botClient.SendMessage(chatId, part, replyParameters: replyParams);
+                        await Task.Delay(50);
+                    }
+                }
             }
             catch (Exception)
             {
