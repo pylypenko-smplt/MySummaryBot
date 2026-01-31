@@ -180,7 +180,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         if (!message.Text.StartsWith('/'))
             messages[chatId].Add(message);
         
-        if (rnd.Next(0, 1000) == 0)
+        if (rnd.Next(0, 500) == 0)
             await botClient.SendMessage(chatId, "Друже, ти дурачок?", replyParameters: replyParams);
         
         if(userId == 5612311136)
@@ -247,20 +247,19 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
                 throw;
             }
         }
-        else if (update.Message.Text.StartsWith("/питання"))
+        else if (update.Message.Text.StartsWith("/питання") || update.Message.Text.StartsWith("@revverb_bot"))
         {
             await botClient.SendMessage(chatId, "Хмм...");
             message.Text = message.Text.Replace("/питання", "").Trim();
-
-            if (update.Message.ReplyToMessage != null)
-            {
-                message.Text +=
-                    $"\n\nReply in context:\n{update.Message.ReplyToMessage.Text}";
-            }
+            message.Text = message.Text.Replace("@revverb_bot", "").Trim();
+            
+            MessageModel? replyMessage = null;
+            if (update.Message.ReplyToMessage != null) 
+                replyMessage = update.Message.ReplyToMessage != null ? messages[chatId].FirstOrDefault(m => m.MessageId == update.Message.ReplyToMessage.Id) : null;
             
             try
             {
-                var answer = await GetAnswer(message);
+                var answer = await GetAnswer(message, replyMessage);
                 await botClient.SendMessage(chatId, answer, replyParameters: replyParams);
             }
             catch (Exception)
@@ -508,13 +507,28 @@ async Task<string> GetSummaryOfSummaries(List<string> messages)
 }
 
 
-async Task<string> GetAnswer(MessageModel message)
+async Task<string> GetAnswer(MessageModel message, MessageModel replyMessage = null)
 {
-    var maxTokens = 5000;
-    var smartModel = "gpt-5";
+    var maxTokens = 1200;
+    var smartModel = "gpt-5.2";
+    
+    var shortContext = new StringBuilder();
+    shortContext.AppendLine($"Author: {message.FirstName}");
+    shortContext.AppendLine("Message:");
+    shortContext.AppendLine(message.Text);
+
+    if (replyMessage != null)
+    {
+        shortContext.AppendLine();
+        shortContext.AppendLine($"Reply to: {replyMessage.FirstName ?? "Unknown"}");
+        shortContext.AppendLine("Reply context:");
+        shortContext.AppendLine(replyMessage.Text ?? string.Empty);
+    }
+    
     var requestBody = new
     {
         model = smartModel,
+        temperature = 0.3,
         messages = new[]
         {
             new { role = "system", content = systemPrompt },
@@ -523,8 +537,8 @@ async Task<string> GetAnswer(MessageModel message)
                 role = "user",
                 content =
                     answerPrompt +
-                    $"Adjust response to fit in {maxTokens} tokens. " +
-                    $"Messages:\n{JsonSerializer.Serialize(message)}"
+                    "\n\n" +
+                    shortContext
             }
         },
         max_completion_tokens = maxTokens
@@ -635,14 +649,17 @@ async Task<string> MakeApiRequest(object request)
 
     var (inputPricePerToken, outputPricePerToken) = completion?.Model switch
     {
-        "gpt-5" => (0.00000125m, 0.00001m),
+        "gpt-5" or "gpt-5.1" or "gpt-5.2" => (0.00000125m, 0.00001m),
         "gpt-5-mini" => (0.00000025m, 0.000002m),
+        "gpt-5-nano" => (0.00000005m, 0.0000004m),
+        "gpt-4.1" or "gpt-4o" => (0.0000025m, 0.00001m),
+        "gpt-4.1-mini" or "gpt-4o-mini" => (0.0000003m, 0.0000012m),
         _ => (0.00000125m, 0.00001m)
     };
 
     var promptTokens = completion?.Usage?.PromptTokens ?? 0m;
     var completionTokens = completion?.Usage?.CompletionTokens ?? 0m;
-    var cost = promptTokens * inputPricePerToken + completionTokens * outputPricePerToken * 41.50m;
+    var cost = promptTokens * inputPricePerToken + completionTokens * outputPricePerToken * 44.50m;
     resp += $"\n\n*Витрачено: {cost:F2} грн*";
     return resp;
 }
