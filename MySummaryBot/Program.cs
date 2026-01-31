@@ -657,10 +657,16 @@ async Task<string> MakeApiRequest(object request)
         _ => (0.00000125m, 0.00001m)
     };
 
-    var promptTokens = completion?.Usage?.PromptTokens ?? 0m;
-    var completionTokens = completion?.Usage?.CompletionTokens ?? 0m;
-    var cost = promptTokens * inputPricePerToken + completionTokens * outputPricePerToken * 44.50m;
-    resp += $"\n\n*Витрачено: {cost:F2} грн*";
+    var promptTokens = completion?.Usage?.PromptTokens ?? 0;
+    var completionTokens = completion?.Usage?.CompletionTokens ?? 0;
+
+    var costUsd =
+        promptTokens * inputPricePerToken +
+        completionTokens * outputPricePerToken;
+
+    var costUah = costUsd * 44.50m;
+
+    resp += $"\n\n*Витрачено: {costUah:F2} грн*";
     return resp;
 }
 
