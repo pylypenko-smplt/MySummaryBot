@@ -7,6 +7,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 
 var messages = new ConcurrentDictionary<long, List<MessageModel>>();
+var messageLocks = new ConcurrentDictionary<long, object>();
 var summaries = new ConcurrentDictionary<long, ConcurrentDictionary<int, string>>();
 
 var adminChatId = Environment.GetEnvironmentVariable("ADMIN_CHAT_ID");
@@ -90,7 +91,8 @@ async Task RunReceivingLoop(TelegramBotClient botClient, CancellationToken token
     while (!token.IsCancellationRequested)
         try
         {
-            await botClient.SendMessage(adminChatId, "Loop started");
+            if (!string.IsNullOrEmpty(adminChatId))
+                await botClient.SendMessage(adminChatId, "Loop started");
             await botClient.DeleteWebhook(true);
             await botClient.ReceiveAsync(
                 HandleUpdateAsync,
@@ -102,7 +104,8 @@ async Task RunReceivingLoop(TelegramBotClient botClient, CancellationToken token
         }
         catch (OperationCanceledException)
         {
-            await botClient.SendMessage(adminChatId, "Loop stopped");
+            if (!string.IsNullOrEmpty(adminChatId))
+                await botClient.SendMessage(adminChatId, "Loop stopped");
             break;
         }
         catch (Exception ex)
@@ -159,7 +162,8 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
 
         Console.WriteLine($"Сhat id: {chatId}, User: {userName} | {userId}, Message: {update.Message.Text}");
 
-        if (!messages.ContainsKey(chatId)) messages[chatId] = new List<MessageModel>();
+        messages.GetOrAdd(chatId, _ => new List<MessageModel>());
+        messageLocks.GetOrAdd(chatId, _ => new object());
 
         if (update.Message.From?.IsBot == true)
             return;
@@ -178,7 +182,8 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         };
 
         if (!message.Text.StartsWith('/'))
-            messages[chatId].Add(message);
+            lock (messageLocks[chatId])
+                messages[chatId].Add(message);
         
         if (rnd.Next(0, 500) == 0)
             await botClient.SendMessage(chatId, "Друже, ти дурачок?", replyParameters: replyParams);
@@ -204,7 +209,9 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         
         if (update.Message.Text.StartsWith("/підсумок_година"))
         {
-            var messagesForSummary = messages[chatId].Where(m => m.Timestamp > DateTime.Now.AddHours(-1)).ToList();
+            List<MessageModel> messagesForSummary;
+            lock (messageLocks[chatId])
+                messagesForSummary = messages[chatId].Where(m => m.Timestamp > DateTime.Now.AddHours(-1)).ToList();
             await botClient.SendMessage(chatId,
                 $"Читаю ваші {messagesForSummary.Count} повідомлень, зачекайте трохи...");
             try
@@ -220,7 +227,9 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         }
         else if (update.Message.Text.StartsWith("/підсумок_день"))
         {
-            var messagesForSummary = messages[chatId].Where(m => m.Timestamp > DateTime.Now.AddDays(-1)).ToList();
+            List<MessageModel> messagesForSummary;
+            lock (messageLocks[chatId])
+                messagesForSummary = messages[chatId].Where(m => m.Timestamp > DateTime.Now.AddDays(-1)).ToList();
             await botClient.SendMessage(chatId,
                 $"Читаю ваші {messagesForSummary.Count} повідомлень, зачекайте трохи...");
             try
@@ -271,7 +280,9 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         else if (update.Message.Text.StartsWith("/повага"))
         {
             await botClient.SendMessage(chatId, "Вимірюю рівень поваги, зачекайте трохи...");
-            var messagesForSummary = messages[chatId].Where(m => m.Timestamp > DateTime.Now.AddHours(-3)).ToList();
+            List<MessageModel> messagesForSummary;
+            lock (messageLocks[chatId])
+                messagesForSummary = messages[chatId].Where(m => m.Timestamp > DateTime.Now.AddHours(-3)).ToList();
             try
             {
                 var respect = await GetRespectLevel(messagesForSummary);
@@ -382,7 +393,8 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
     catch (Exception e)
     {
         Console.WriteLine($"[HandleUpdateAsync Error] {e.Message}");
-        await botClient.SendMessage(adminChatId, "Error: " + e.Message);
+        if (!string.IsNullOrEmpty(adminChatId))
+            await botClient.SendMessage(adminChatId, "Error: " + e.Message);
     }
 }
 
@@ -390,8 +402,8 @@ async Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, C
 {
     var emsg = $"[HandleErrorAsync] {exception.Message}; \n {exception.StackTrace}";
     Console.WriteLine(emsg);
-    await botClient.SendMessage(adminChatId, emsg);
-    throw exception;
+    if (!string.IsNullOrEmpty(adminChatId))
+        await botClient.SendMessage(adminChatId, emsg, cancellationToken: cancellationToken);
 }
 
 async Task<string> GetRespectLevel(List<MessageModel> messagesForRepsect)
@@ -428,8 +440,8 @@ async Task<string> GetSummary(List<MessageModel> messagesForSummary)
         .ToList();
 
     var summaryByHour = new List<string>();
-    summaries.TryGetValue(messagesForSummary[0].ChatId, out var existingSummaries);
-    existingSummaries ??= new ConcurrentDictionary<int, string>();
+    var chatId = messagesForSummary[0].ChatId;
+    var existingSummaries = summaries.GetOrAdd(chatId, _ => new ConcurrentDictionary<int, string>());
     foreach (var msg in messagesByHour)
     {
         if (existingSummaries.TryGetValue(msg.Hour, out var existingSummary))
@@ -555,11 +567,16 @@ async Task ClearOldMessages(TelegramBotClient botClient)
     {
         var now = DateTime.Now;
         foreach (var chatId in messages.Keys)
-            messages[chatId] = messages[chatId].Where(m => m.Timestamp > now.AddDays(-1)).ToList();
+        {
+            var lockObj = messageLocks.GetOrAdd(chatId, _ => new object());
+            lock (lockObj)
+                messages[chatId] = messages[chatId].Where(m => m.Timestamp > now.AddDays(-1)).ToList();
+        }
     }
     catch (Exception e)
     {
-        await botClient.SendMessage(adminChatId, $"Error: {e.Message}");
+        if (!string.IsNullOrEmpty(adminChatId))
+            await botClient.SendMessage(adminChatId, $"Error: {e.Message}");
     }
 }
 
@@ -570,7 +587,12 @@ async Task ClearOldSummaries(TelegramBotClient botClient)
         var now = DateTime.Now;
         foreach (var chatId in summaries.Keys)
         {
-            var recentMessages = messages[chatId].Where(m => m.Timestamp > now.AddHours(-1)).ToList();
+            if (!messages.TryGetValue(chatId, out var chatMessages))
+                continue;
+            List<MessageModel> recentMessages;
+            var lockObj = messageLocks.GetOrAdd(chatId, _ => new object());
+            lock (lockObj)
+                recentMessages = chatMessages.Where(m => m.Timestamp > now.AddHours(-1)).ToList();
             summaries[chatId] = new ConcurrentDictionary<int, string>(
                 summaries[chatId].Where(s => recentMessages.Any(m => m.Timestamp.Hour == s.Key))
             );
@@ -578,7 +600,8 @@ async Task ClearOldSummaries(TelegramBotClient botClient)
     }
     catch (Exception e)
     {
-        await botClient.SendMessage(adminChatId, "Error: " + e.Message);
+        if (!string.IsNullOrEmpty(adminChatId))
+            await botClient.SendMessage(adminChatId, "Error: " + e.Message);
     }
 }
 
@@ -587,7 +610,9 @@ static async Task<bool> IsUserAdminOrOwnerAsync(ITelegramBotClient botClient, lo
     try
     {
         var admins = await botClient.GetChatAdministrators(chatId);
-        if (admins.Any(admin => admin.User.Id == userId && admin.Status == ChatMemberStatus.Creator)) return true;
+        if (admins.Any(admin => admin.User.Id == userId &&
+                (admin.Status == ChatMemberStatus.Creator || admin.Status == ChatMemberStatus.Administrator)))
+            return true;
     }
     catch (Exception ex)
     {
