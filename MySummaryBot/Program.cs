@@ -8,7 +8,6 @@ using Telegram.Bot.Types.Enums;
 
 var messages = new ConcurrentDictionary<long, List<MessageModel>>();
 var messageLocks = new ConcurrentDictionary<long, object>();
-var summaries = new ConcurrentDictionary<long, ConcurrentDictionary<int, string>>();
 
 var adminChatId = Environment.GetEnvironmentVariable("ADMIN_CHAT_ID");
 var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
@@ -128,7 +127,6 @@ async Task RunBackgroundLoop(TelegramBotClient botClient, CancellationToken toke
         {
             await Task.Delay(10000, token);
             await ClearOldMessages(botClient);
-            await ClearOldSummaries(botClient);
         }
         catch (OperationCanceledException)
         {
@@ -423,30 +421,85 @@ async Task<string> GetSummary(List<MessageModel> messagesForSummary)
     if (messagesForSummary.Count == 0)
         return "Немає повідомлень для підсумку.";
 
-    var messagesByHour = messagesForSummary
-        .GroupBy(m => m.Timestamp.Hour)
-        .Select(g => new { Hour = g.Key, Messages = g.ToList() })
+    const int chunkSize = 200;
+    var ordered = messagesForSummary.OrderBy(m => m.Timestamp).ToList();
+
+    var chunks = ordered
+        .Select((m, i) => new { Message = m, Index = i })
+        .GroupBy(x => x.Index / chunkSize)
+        .Select(g => g.Select(x => x.Message).ToList())
         .ToList();
 
-    var chatId = messagesForSummary[0].ChatId;
-    var existingSummaries = summaries.GetOrAdd(chatId, _ => new ConcurrentDictionary<int, string>());
+    // Single chunk — summarize directly
+    if (chunks.Count == 1)
+        return await GetSummaryHour(chunks[0]);
 
-    var summaryByHour = new List<string>();
-    foreach (var msg in messagesByHour)
+    // Multiple chunks — two-level summarization
+    var chunkSummaries = new List<string>();
+    foreach (var chunk in chunks)
     {
-        if (existingSummaries.TryGetValue(msg.Hour, out var existingSummary))
-        {
-            summaryByHour.Add($"Hour: {msg.Hour}\n{existingSummary}");
-            continue;
-        }
-
-        var summary = await GetSummaryHour(msg.Messages, "Make a bullet point summary of the messages");
-        existingSummaries[msg.Hour] = summary;
-        summaryByHour.Add($"Hour: {msg.Hour}\n{summary}");
-        await Task.Delay(5000);
+        var timeRange = $"{chunk[0].Timestamp:HH:mm}–{chunk[^1].Timestamp:HH:mm}";
+        var summary = await GetChunkSummary(chunk);
+        chunkSummaries.Add($"[{timeRange}, {chunk.Count} повідомлень]\n{summary}");
+        await Task.Delay(1000);
     }
 
-    return string.Join("\n\n", summaryByHour);
+    return await MergeSummaries(chunkSummaries, messagesForSummary.Count);
+}
+
+async Task<string> GetChunkSummary(List<MessageModel> chunk)
+{
+    var formattedMessages = JsonSerializer.Serialize(chunk);
+    const int maxTokens = 1500;
+
+    var requestBody = new
+    {
+        model,
+        messages = new[]
+        {
+            new { role = "system", content = systemPrompt },
+            new
+            {
+                role = "user",
+                content =
+                    "Extract the key topics, decisions, and notable events from these messages. " +
+                    "Be brief — maximum 10 bullet points. Refer to people as Пан or Пані. " +
+                    $"Messages:\n{formattedMessages}"
+            }
+        },
+        max_completion_tokens = maxTokens
+    };
+
+    return await MakeApiRequest(requestBody, appendCost: false);
+}
+
+async Task<string> MergeSummaries(List<string> chunkSummaries, int totalMessages)
+{
+    var combined = string.Join("\n\n", chunkSummaries);
+    const int maxTokens = 2000;
+
+    var requestBody = new
+    {
+        model,
+        messages = new[]
+        {
+            new { role = "system", content = systemPrompt },
+            new
+            {
+                role = "user",
+                content =
+                    summaryPrompt +
+                    $"\n\nBelow are summaries of different time periods from a chat ({totalMessages} messages total). " +
+                    "Combine them into a single compact summary. " +
+                    "First list the main topics of the day, then briefly note key events in chronological order. " +
+                    "Keep the total response under 2000 characters. " +
+                    $"Summaries:\n{combined}"
+            }
+        },
+        max_completion_tokens = maxTokens
+    };
+
+    return await MakeApiRequest(requestBody);
 }
 
 async Task<string> GetSummaryHour(List<MessageModel> msgs, string? promptOverride = null)
@@ -530,29 +583,6 @@ async Task ClearOldMessages(TelegramBotClient botClient)
     }
 }
 
-async Task ClearOldSummaries(TelegramBotClient botClient)
-{
-    try
-    {
-        var now = DateTime.Now;
-        foreach (var chatId in summaries.Keys)
-        {
-            if (!messages.TryGetValue(chatId, out var chatMessages))
-                continue;
-            List<MessageModel> recentMessages;
-            var lockObj = messageLocks.GetOrAdd(chatId, _ => new object());
-            lock (lockObj)
-                recentMessages = chatMessages.Where(m => m.Timestamp > now.AddHours(-1)).ToList();
-            summaries[chatId] = new ConcurrentDictionary<int, string>(
-                summaries[chatId].Where(s => recentMessages.Any(m => m.Timestamp.Hour == s.Key))
-            );
-        }
-    }
-    catch (Exception e)
-    {
-        await SendAdmin(botClient, "Error: " + e.Message);
-    }
-}
 
 static async Task<bool> IsUserAdminOrOwnerAsync(ITelegramBotClient botClient, long chatId, long userId)
 {
@@ -601,7 +631,7 @@ static string GetRandomEmoji()
     return emojis[Random.Shared.Next(emojis.Length)];
 }
 
-async Task<string> MakeApiRequest(object request)
+async Task<string> MakeApiRequest(object request, bool appendCost = true)
 {
     var response = await httpClient.PostAsync(
         "https://api.openai.com/v1/chat/completions",
@@ -633,10 +663,13 @@ async Task<string> MakeApiRequest(object request)
     var promptTokens = completion?.Usage?.PromptTokens ?? 0;
     var completionTokens = completion?.Usage?.CompletionTokens ?? 0;
 
-    var costUsd = promptTokens * inputPricePerToken + completionTokens * outputPricePerToken;
-    var costUah = costUsd * 44.50m;
+    if (appendCost)
+    {
+        var costUsd = promptTokens * inputPricePerToken + completionTokens * outputPricePerToken;
+        var costUah = costUsd * 44.50m;
+        resp += $"\n\n*Витрачено: {costUah:F2} грн*";
+    }
 
-    resp += $"\n\n*Витрачено: {costUah:F2} грн*";
     return resp;
 }
 
