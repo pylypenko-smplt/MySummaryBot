@@ -37,12 +37,12 @@ try
     };
 
     await botClient.SetMyCommands([
-        new BotCommand { Command = "підсумок", Description = "Підсумок за останню годину" },
-        new BotCommand { Command = "підсумок_день", Description = "Підсумок за останні 24 години" },
-        new BotCommand { Command = "питання", Description = "Задати питання боту" },
-        new BotCommand { Command = "повага", Description = "Виміряти рівень поваги" },
-        new BotCommand { Command = "голосування", Description = "Голосування за зустріч" },
-        new BotCommand { Command = "допомога", Description = "Список команд" }
+        new BotCommand { Command = "summary", Description = "Підсумок за останню годину" },
+        new BotCommand { Command = "summary_day", Description = "Підсумок за останні 24 години" },
+        new BotCommand { Command = "question", Description = "Задати питання боту" },
+        new BotCommand { Command = "respect", Description = "Виміряти рівень поваги" },
+        new BotCommand { Command = "vote", Description = "Голосування за зустріч" },
+        new BotCommand { Command = "help", Description = "Список команд" }
     ]);
 
     await bot.SendAdmin("Bot started");

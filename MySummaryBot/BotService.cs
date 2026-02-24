@@ -131,7 +131,7 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
             if (messageText.Contains("sens", StringComparison.InvariantCultureIgnoreCase))
                 await bot.SendMessage(chatId, messageText.Replace("sens", "lanos", StringComparison.InvariantCultureIgnoreCase), replyParameters: replyParams, cancellationToken: cancellationToken);
 
-            if (messageText.StartsWith("/підсумок_день"))
+            if (messageText.StartsWith("/підсумок_день") || messageText.StartsWith("/summary_day"))
             {
                 var msgs = store.GetMessages(chatId, TimeSpan.FromDays(1));
                 if (msgs.Count == 0)
@@ -165,7 +165,7 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                     throw;
                 }
             }
-            else if (messageText.StartsWith("/підсумок"))
+            else if (messageText.StartsWith("/підсумок") || messageText.StartsWith("/summary"))
             {
                 var msgs = store.GetMessages(chatId, TimeSpan.FromHours(1));
                 if (msgs.Count == 0)
@@ -185,9 +185,9 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                     throw;
                 }
             }
-            else if (messageText.StartsWith("/питання") || messageText.StartsWith("@revverb_bot"))
+            else if (messageText.StartsWith("/питання") || messageText.StartsWith("/question") || messageText.StartsWith("@revverb_bot"))
             {
-                message.Text = message.Text!.Replace("/питання", "").Trim();
+                message.Text = message.Text!.Replace("/питання", "").Replace("/question", "").Trim();
                 message.Text = message.Text.Replace("@revverb_bot", "").Trim();
 
                 if (string.IsNullOrWhiteSpace(message.Text) && update.Message.ReplyToMessage == null)
@@ -213,7 +213,7 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                     throw;
                 }
             }
-            else if (messageText.StartsWith("/повага"))
+            else if (messageText.StartsWith("/повага") || messageText.StartsWith("/respect"))
             {
                 var msgs = store.GetMessages(chatId, TimeSpan.FromHours(3));
                 if (msgs.Count == 0)
@@ -233,7 +233,7 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                     throw;
                 }
             }
-            else if (messageText.StartsWith("/голосування"))
+            else if (messageText.StartsWith("/голосування") || messageText.StartsWith("/vote"))
             {
                 if (!await IsUserAdminOrOwnerAsync(bot, chatId, update.Message.From!.Id))
                 {
@@ -250,16 +250,16 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
 
                 await bot.SendPoll(chatId, "Коли збираємось?", options, false, allowsMultipleAnswers: true);
             }
-            else if (messageText.StartsWith("/допомога"))
+            else if (messageText.StartsWith("/допомога") || messageText.StartsWith("/help"))
             {
                 var helpMessage =
-                    "/підсумок - згенерувати підсумок за останню годину\n" +
-                    "/підсумок_день - згенерувати підсумок за останні 24 години\n" +
-                    "/питання [питання] - згенерувати відповідь на питання\n" +
+                    "/summary (/підсумок) - підсумок за останню годину\n" +
+                    "/summary_day (/підсумок_день) - підсумок за останні 24 години\n" +
+                    "/question (/питання) [питання] - відповідь на питання\n" +
                     "  також можна тегнути @revverb_bot з питанням\n" +
-                    "/повага - виміряти рівень поваги\n" +
-                    "/голосування - голосування за наступну зустріч (для адмінів)\n" +
-                    "/допомога - показати цей список команд";
+                    "/respect (/повага) - виміряти рівень поваги\n" +
+                    "/vote (/голосування) - голосування за зустріч (для адмінів)\n" +
+                    "/help (/допомога) - показати цей список команд";
 
                 if (chatId.ToString() == adminChatId)
                     helpMessage +=
