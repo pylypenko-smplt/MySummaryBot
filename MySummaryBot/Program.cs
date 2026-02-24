@@ -145,13 +145,17 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
 {
     try
     {
-        if (update.Message?.Text == null)
+        if (update.Message == null)
+            return;
+
+        var messageText = update.Message.Text ?? update.Message.Caption;
+        if (messageText == null)
             return;
 
         var chatId = update.Message.Chat.Id;
         var replyParams = new ReplyParameters { MessageId = update.Message.MessageId };
 
-        if (!update.Message.Text.Contains("http") && update.Message.Text.Split(' ').Any(t => t.Length > 100))
+        if (!messageText.Contains("http") && messageText.Split(' ').Any(t => t.Length > 100))
         {
             await botClient.SendMessage(chatId, "Друже, ти дурачок?", replyParameters: replyParams);
             return;
@@ -160,7 +164,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         var userName = update.Message.From?.FirstName ?? update.Message.From?.Username;
         var userId = update.Message.From?.Id ?? 0;
 
-        Console.WriteLine($"Сhat id: {chatId}, User: {userName} | {userId}, Message: {update.Message.Text}");
+        Console.WriteLine($"Сhat id: {chatId}, User: {userName} | {userId}, Message: {messageText}");
 
         messages.GetOrAdd(chatId, _ => new List<MessageModel>());
         messageLocks.GetOrAdd(chatId, _ => new object());
@@ -177,7 +181,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             Language = update.Message.From?.LanguageCode,
             FirstName = userName,
             Timestamp = DateTime.Now,
-            Text = update.Message.Text,
+            Text = messageText,
             ReplyToMessageId = update.Message.ReplyToMessage?.Id
         };
 
@@ -191,23 +195,23 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         if (userId == 5612311136)
             return;
 
-        if ((update.Message.Text.Contains("twingo", StringComparison.InvariantCultureIgnoreCase) ||
-             update.Message.Text.Contains("твінго", StringComparison.InvariantCultureIgnoreCase) ||
-             update.Message.Text.Contains("твинго", StringComparison.InvariantCultureIgnoreCase)) &&
-            !update.Message.Text.Contains("merci", StringComparison.InvariantCultureIgnoreCase))
+        if ((messageText.Contains("twingo", StringComparison.InvariantCultureIgnoreCase) ||
+             messageText.Contains("твінго", StringComparison.InvariantCultureIgnoreCase) ||
+             messageText.Contains("твинго", StringComparison.InvariantCultureIgnoreCase)) &&
+            !messageText.Contains("merci", StringComparison.InvariantCultureIgnoreCase))
             await botClient.SendMessage(chatId, "MERCI TWINGO", replyParameters: replyParams);
 
-        if ((update.Message.Text.Contains("lanos", StringComparison.InvariantCultureIgnoreCase) ||
-             update.Message.Text.Contains("ланос", StringComparison.InvariantCultureIgnoreCase)) &&
-            !update.Message.Text.Contains("holy", StringComparison.InvariantCultureIgnoreCase))
+        if ((messageText.Contains("lanos", StringComparison.InvariantCultureIgnoreCase) ||
+             messageText.Contains("ланос", StringComparison.InvariantCultureIgnoreCase)) &&
+            !messageText.Contains("holy", StringComparison.InvariantCultureIgnoreCase))
             await botClient.SendMessage(chatId, "HOLY LANOS", replyParameters: replyParams);
 
-        if (update.Message.Text.Contains("сенс", StringComparison.InvariantCultureIgnoreCase))
-            await botClient.SendMessage(chatId, update.Message.Text.Replace("сенс", "ланос", StringComparison.InvariantCultureIgnoreCase), replyParameters: replyParams);
-        if (update.Message.Text.Contains("sens", StringComparison.InvariantCultureIgnoreCase))
-            await botClient.SendMessage(chatId, update.Message.Text.Replace("sens", "lanos", StringComparison.InvariantCultureIgnoreCase), replyParameters: replyParams);
+        if (messageText.Contains("сенс", StringComparison.InvariantCultureIgnoreCase))
+            await botClient.SendMessage(chatId, messageText.Replace("сенс", "ланос", StringComparison.InvariantCultureIgnoreCase), replyParameters: replyParams);
+        if (messageText.Contains("sens", StringComparison.InvariantCultureIgnoreCase))
+            await botClient.SendMessage(chatId, messageText.Replace("sens", "lanos", StringComparison.InvariantCultureIgnoreCase), replyParameters: replyParams);
 
-        if (update.Message.Text.StartsWith("/підсумок_година"))
+        if (messageText.StartsWith("/підсумок_година"))
         {
             List<MessageModel> messagesForSummary;
             lock (messageLocks[chatId])
@@ -224,7 +228,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
                 throw;
             }
         }
-        else if (update.Message.Text.StartsWith("/підсумок_день"))
+        else if (messageText.StartsWith("/підсумок_день"))
         {
             List<MessageModel> messagesForSummary;
             lock (messageLocks[chatId])
@@ -232,7 +236,8 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             await botClient.SendMessage(chatId, $"Читаю ваші {messagesForSummary.Count} повідомлень, зачекайте трохи...");
             try
             {
-                var summary = await GetSummary(messagesForSummary);
+                var summary = await GetSummary(messagesForSummary,
+                    async msg => await botClient.SendMessage(chatId, msg));
                 if (summary.Length < 4096)
                     await botClient.SendMessage(chatId, summary, replyParameters: replyParams);
                 else
@@ -254,11 +259,18 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
                 throw;
             }
         }
-        else if (update.Message.Text.StartsWith("/питання") || update.Message.Text.StartsWith("@revverb_bot"))
+        else if (messageText.StartsWith("/питання") || messageText.StartsWith("@revverb_bot"))
         {
-            await botClient.SendMessage(chatId, "Хмм...");
             message.Text = message.Text!.Replace("/питання", "").Trim();
             message.Text = message.Text.Replace("@revverb_bot", "").Trim();
+
+            if (string.IsNullOrWhiteSpace(message.Text) && update.Message.ReplyToMessage == null)
+            {
+                await botClient.SendMessage(chatId, "Напишіть питання після команди, наприклад:\n/питання Що таке Docker?", replyParameters: replyParams);
+                return;
+            }
+
+            await botClient.SendMessage(chatId, "Хмм...");
 
             MessageModel? replyMessage = null;
             if (update.Message.ReplyToMessage != null)
@@ -276,7 +288,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
                 throw;
             }
         }
-        else if (update.Message.Text.StartsWith("/повага"))
+        else if (messageText.StartsWith("/повага"))
         {
             await botClient.SendMessage(chatId, "Вимірюю рівень поваги, зачекайте трохи...");
             List<MessageModel> messagesForSummary;
@@ -293,7 +305,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
                 throw;
             }
         }
-        else if (update.Message.Text.StartsWith("/голосування"))
+        else if (messageText.StartsWith("/голосування"))
         {
             if (!await IsUserAdminOrOwnerAsync(botClient, chatId, update.Message.From!.Id))
             {
@@ -310,7 +322,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
 
             await botClient.SendPoll(chatId, "Коли збираємось?", options, false, allowsMultipleAnswers: true);
         }
-        else if (update.Message.Text.StartsWith("/допомога"))
+        else if (messageText.StartsWith("/допомога"))
         {
             var helpMessage =
                 "/підсумок_година - згенерувати підсумок за останню годину\n" +
@@ -335,44 +347,44 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         else if (chatId.ToString() == adminChatId)
         {
             // _reset variants must be checked before their prefix counterparts
-            if (update.Message.Text.StartsWith("/prompt_summary_reset"))
+            if (messageText.StartsWith("/prompt_summary_reset"))
             {
                 summaryPrompt = defaultSummaryPrompt;
                 await botClient.SendMessage(chatId, "Prompt reset");
             }
-            else if (update.Message.Text.StartsWith("/prompt_summary"))
+            else if (messageText.StartsWith("/prompt_summary"))
             {
-                summaryPrompt = update.Message.Text.Replace("/prompt_summary", "").Trim();
+                summaryPrompt = messageText.Replace("/prompt_summary", "").Trim();
                 await botClient.SendMessage(chatId, "Prompt updated");
             }
-            else if (update.Message.Text.StartsWith("/prompt_respect_reset"))
+            else if (messageText.StartsWith("/prompt_respect_reset"))
             {
                 respectPrompt = defaultRespectPrompt;
                 await botClient.SendMessage(chatId, "Prompt reset");
             }
-            else if (update.Message.Text.StartsWith("/prompt_respect"))
+            else if (messageText.StartsWith("/prompt_respect"))
             {
-                respectPrompt = update.Message.Text.Replace("/prompt_respect", "").Trim();
+                respectPrompt = messageText.Replace("/prompt_respect", "").Trim();
                 await botClient.SendMessage(chatId, "Prompt updated");
             }
-            else if (update.Message.Text.StartsWith("/prompt_answer_reset"))
+            else if (messageText.StartsWith("/prompt_answer_reset"))
             {
                 answerPrompt = defaultAnswerPrompt;
                 await botClient.SendMessage(chatId, "Prompt reset");
             }
-            else if (update.Message.Text.StartsWith("/prompt_answer"))
+            else if (messageText.StartsWith("/prompt_answer"))
             {
-                answerPrompt = update.Message.Text.Replace("/prompt_answer", "").Trim();
+                answerPrompt = messageText.Replace("/prompt_answer", "").Trim();
                 await botClient.SendMessage(chatId, "Prompt updated");
             }
-            else if (update.Message.Text.StartsWith("/model_reset"))
+            else if (messageText.StartsWith("/model_reset"))
             {
                 model = defaultModel;
                 await botClient.SendMessage(chatId, "Model reset");
             }
-            else if (update.Message.Text.StartsWith("/model"))
+            else if (messageText.StartsWith("/model"))
             {
-                model = update.Message.Text.Replace("/model", "").Trim();
+                model = messageText.Replace("/model", "").Trim();
                 await botClient.SendMessage(chatId, "Model updated");
             }
         }
@@ -394,7 +406,7 @@ async Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, C
 async Task<string> GetRespectLevel(List<MessageModel> messagesForRespect)
 {
     var formattedMessages = JsonSerializer.Serialize(messagesForRespect);
-    const int maxTokens = 5000;
+    const int maxTokens = 16384;
 
     var requestBody = new
     {
@@ -416,7 +428,7 @@ async Task<string> GetRespectLevel(List<MessageModel> messagesForRespect)
     return await MakeApiRequest(requestBody);
 }
 
-async Task<string> GetSummary(List<MessageModel> messagesForSummary)
+async Task<string> GetSummary(List<MessageModel> messagesForSummary, Func<string, Task>? onProgress = null)
 {
     if (messagesForSummary.Count == 0)
         return "Немає повідомлень для підсумку.";
@@ -436,13 +448,20 @@ async Task<string> GetSummary(List<MessageModel> messagesForSummary)
 
     // Multiple chunks — two-level summarization
     var chunkSummaries = new List<string>();
-    foreach (var chunk in chunks)
+    for (var i = 0; i < chunks.Count; i++)
     {
+        var chunk = chunks[i];
+        if (onProgress != null)
+            await onProgress($"📖 Обробляю частину {i + 1}/{chunks.Count}...");
+
         var timeRange = $"{chunk[0].Timestamp:HH:mm}–{chunk[^1].Timestamp:HH:mm}";
         var summary = await GetChunkSummary(chunk);
         chunkSummaries.Add($"[{timeRange}, {chunk.Count} повідомлень]\n{summary}");
         await Task.Delay(1000);
     }
+
+    if (onProgress != null)
+        await onProgress("✍️ Формую фінальний підсумок...");
 
     return await MergeSummaries(chunkSummaries, messagesForSummary.Count);
 }
@@ -450,7 +469,7 @@ async Task<string> GetSummary(List<MessageModel> messagesForSummary)
 async Task<string> GetChunkSummary(List<MessageModel> chunk)
 {
     var formattedMessages = JsonSerializer.Serialize(chunk);
-    const int maxTokens = 1500;
+    const int maxTokens = 8192;
 
     var requestBody = new
     {
@@ -476,7 +495,7 @@ async Task<string> GetChunkSummary(List<MessageModel> chunk)
 async Task<string> MergeSummaries(List<string> chunkSummaries, int totalMessages)
 {
     var combined = string.Join("\n\n", chunkSummaries);
-    const int maxTokens = 2000;
+    const int maxTokens = 8192;
 
     var requestBody = new
     {
@@ -505,7 +524,7 @@ async Task<string> MergeSummaries(List<string> chunkSummaries, int totalMessages
 async Task<string> GetSummaryHour(List<MessageModel> msgs, string? promptOverride = null)
 {
     var formattedMessages = JsonSerializer.Serialize(msgs);
-    const int maxTokens = 5000;
+    const int maxTokens = 16384;
 
     var requestBody = new
     {
@@ -529,7 +548,7 @@ async Task<string> GetSummaryHour(List<MessageModel> msgs, string? promptOverrid
 
 async Task<string> GetAnswer(MessageModel message, MessageModel? replyMessage = null)
 {
-    const int maxTokens = 1200;
+    const int maxTokens = 4096;
     const string smartModel = "gpt-5.2";
 
     var shortContext = new StringBuilder();
