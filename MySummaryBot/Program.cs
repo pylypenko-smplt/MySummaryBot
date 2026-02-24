@@ -216,6 +216,11 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             List<MessageModel> messagesForSummary;
             lock (messageLocks[chatId])
                 messagesForSummary = messages[chatId].Where(m => m.Timestamp > DateTime.Now.AddHours(-1)).ToList();
+            if (messagesForSummary.Count == 0)
+            {
+                await botClient.SendMessage(chatId, "Немає повідомлень за останню годину.", replyParameters: replyParams);
+                return;
+            }
             await botClient.SendMessage(chatId, $"Читаю ваші {messagesForSummary.Count} повідомлень, зачекайте трохи...");
             try
             {
@@ -233,6 +238,11 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             List<MessageModel> messagesForSummary;
             lock (messageLocks[chatId])
                 messagesForSummary = messages[chatId].Where(m => m.Timestamp > DateTime.Now.AddDays(-1)).ToList();
+            if (messagesForSummary.Count == 0)
+            {
+                await botClient.SendMessage(chatId, "Немає повідомлень за останню добу.", replyParameters: replyParams);
+                return;
+            }
             await botClient.SendMessage(chatId, $"Читаю ваші {messagesForSummary.Count} повідомлень, зачекайте трохи...");
             try
             {
@@ -290,10 +300,15 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         }
         else if (messageText.StartsWith("/повага"))
         {
-            await botClient.SendMessage(chatId, "Вимірюю рівень поваги, зачекайте трохи...");
             List<MessageModel> messagesForSummary;
             lock (messageLocks[chatId])
                 messagesForSummary = messages[chatId].Where(m => m.Timestamp > DateTime.Now.AddHours(-3)).ToList();
+            if (messagesForSummary.Count == 0)
+            {
+                await botClient.SendMessage(chatId, "Немає повідомлень за останні 3 години.", replyParameters: replyParams);
+                return;
+            }
+            await botClient.SendMessage(chatId, "Вимірюю рівень поваги, зачекайте трохи...");
             try
             {
                 var respect = await GetRespectLevel(messagesForSummary);
@@ -328,8 +343,10 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
                 "/підсумок_година - згенерувати підсумок за останню годину\n" +
                 "/підсумок_день - згенерувати підсумок за останні 24 години\n" +
                 "/питання [питання] - згенерувати відповідь на питання\n" +
+                "  також можна тегнути @revverb_bot з питанням\n" +
                 "/повага - виміряти рівень поваги\n" +
-                "/голосування - голосування за наступну зустріч (для адмінів)";
+                "/голосування - голосування за наступну зустріч (для адмінів)\n" +
+                "/допомога - показати цей список команд";
 
             if (chatId.ToString() == adminChatId)
                 helpMessage +=
@@ -354,7 +371,13 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             }
             else if (messageText.StartsWith("/prompt_summary"))
             {
-                summaryPrompt = messageText.Replace("/prompt_summary", "").Trim();
+                var value = messageText.Replace("/prompt_summary", "").Trim();
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    await botClient.SendMessage(chatId, "Вкажіть промпт після команди, наприклад:\n/prompt_summary Summarize briefly.");
+                    return;
+                }
+                summaryPrompt = value;
                 await botClient.SendMessage(chatId, "Prompt updated");
             }
             else if (messageText.StartsWith("/prompt_respect_reset"))
@@ -364,7 +387,13 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             }
             else if (messageText.StartsWith("/prompt_respect"))
             {
-                respectPrompt = messageText.Replace("/prompt_respect", "").Trim();
+                var value = messageText.Replace("/prompt_respect", "").Trim();
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    await botClient.SendMessage(chatId, "Вкажіть промпт після команди, наприклад:\n/prompt_respect Evaluate respect level.");
+                    return;
+                }
+                respectPrompt = value;
                 await botClient.SendMessage(chatId, "Prompt updated");
             }
             else if (messageText.StartsWith("/prompt_answer_reset"))
@@ -374,7 +403,13 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             }
             else if (messageText.StartsWith("/prompt_answer"))
             {
-                answerPrompt = messageText.Replace("/prompt_answer", "").Trim();
+                var value = messageText.Replace("/prompt_answer", "").Trim();
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    await botClient.SendMessage(chatId, "Вкажіть промпт після команди, наприклад:\n/prompt_answer Answer concisely.");
+                    return;
+                }
+                answerPrompt = value;
                 await botClient.SendMessage(chatId, "Prompt updated");
             }
             else if (messageText.StartsWith("/model_reset"))
@@ -384,9 +419,23 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
             }
             else if (messageText.StartsWith("/model"))
             {
-                model = messageText.Replace("/model", "").Trim();
+                var value = messageText.Replace("/model", "").Trim();
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    await botClient.SendMessage(chatId, "Вкажіть модель після команди, наприклад:\n/model gpt-5-mini");
+                    return;
+                }
+                model = value;
                 await botClient.SendMessage(chatId, "Model updated");
             }
+            else if (messageText.StartsWith("/"))
+            {
+                await botClient.SendMessage(chatId, "Невідома команда. Напишіть /допомога щоб побачити список доступних команд.", replyParameters: replyParams);
+            }
+        }
+        else if (messageText.StartsWith("/"))
+        {
+            await botClient.SendMessage(chatId, "Невідома команда. Напишіть /допомога щоб побачити список доступних команд.", replyParameters: replyParams);
         }
     }
     catch (Exception e)
