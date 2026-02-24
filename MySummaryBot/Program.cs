@@ -71,6 +71,15 @@ try
         cts.Cancel();
     };
 
+    await botClient.SetMyCommands([
+        new BotCommand { Command = "підсумок", Description = "Підсумок за останню годину" },
+        new BotCommand { Command = "підсумок_день", Description = "Підсумок за останні 24 години" },
+        new BotCommand { Command = "питання", Description = "Задати питання боту" },
+        new BotCommand { Command = "повага", Description = "Виміряти рівень поваги" },
+        new BotCommand { Command = "голосування", Description = "Голосування за зустріч" },
+        new BotCommand { Command = "допомога", Description = "Список команд" }
+    ]);
+
     await SendAdmin(botClient, "Bot started");
 
     var receivingTask = RunReceivingLoop(botClient, cts.Token);
@@ -211,29 +220,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         if (messageText.Contains("sens", StringComparison.InvariantCultureIgnoreCase))
             await botClient.SendMessage(chatId, messageText.Replace("sens", "lanos", StringComparison.InvariantCultureIgnoreCase), replyParameters: replyParams);
 
-        if (messageText.StartsWith("/підсумок_година"))
-        {
-            List<MessageModel> messagesForSummary;
-            lock (messageLocks[chatId])
-                messagesForSummary = messages[chatId].Where(m => m.Timestamp > DateTime.Now.AddHours(-1)).ToList();
-            if (messagesForSummary.Count == 0)
-            {
-                await botClient.SendMessage(chatId, "Немає повідомлень за останню годину.", replyParameters: replyParams);
-                return;
-            }
-            await botClient.SendMessage(chatId, $"Читаю ваші {messagesForSummary.Count} повідомлень, зачекайте трохи...");
-            try
-            {
-                var summary = await GetSummaryHour(messagesForSummary);
-                await botClient.SendMessage(chatId, summary);
-            }
-            catch (Exception)
-            {
-                await botClient.SendMessage(chatId, "Не вдалося згенерувати підсумок, спробуйте ще раз трохи пізніше");
-                throw;
-            }
-        }
-        else if (messageText.StartsWith("/підсумок_день"))
+        if (messageText.StartsWith("/підсумок_день"))
         {
             List<MessageModel> messagesForSummary;
             lock (messageLocks[chatId])
@@ -262,6 +249,28 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
                         await Task.Delay(50);
                     }
                 }
+            }
+            catch (Exception)
+            {
+                await botClient.SendMessage(chatId, "Не вдалося згенерувати підсумок, спробуйте ще раз трохи пізніше");
+                throw;
+            }
+        }
+        else if (messageText.StartsWith("/підсумок"))
+        {
+            List<MessageModel> messagesForSummary;
+            lock (messageLocks[chatId])
+                messagesForSummary = messages[chatId].Where(m => m.Timestamp > DateTime.Now.AddHours(-1)).ToList();
+            if (messagesForSummary.Count == 0)
+            {
+                await botClient.SendMessage(chatId, "Немає повідомлень за останню годину.", replyParameters: replyParams);
+                return;
+            }
+            await botClient.SendMessage(chatId, $"Читаю ваші {messagesForSummary.Count} повідомлень, зачекайте трохи...");
+            try
+            {
+                var summary = await GetSummaryHour(messagesForSummary);
+                await botClient.SendMessage(chatId, summary);
             }
             catch (Exception)
             {
@@ -340,7 +349,7 @@ async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, Cancel
         else if (messageText.StartsWith("/допомога"))
         {
             var helpMessage =
-                "/підсумок_година - згенерувати підсумок за останню годину\n" +
+                "/підсумок - згенерувати підсумок за останню годину\n" +
                 "/підсумок_день - згенерувати підсумок за останні 24 години\n" +
                 "/питання [питання] - згенерувати відповідь на питання\n" +
                 "  також можна тегнути @revverb_bot з питанням\n" +
