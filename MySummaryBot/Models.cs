@@ -18,6 +18,18 @@ public class MessageModel
     [JsonPropertyName("reply_to")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? ReplyToMessageId { get; set; }
+
+    [JsonPropertyName("media_type")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? MediaType { get; set; }
+
+    [JsonPropertyName("link_preview")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LinkPreview { get; set; }
+
+    [JsonIgnore] public string? UrlNormalized { get; set; }
+    [JsonIgnore] public long? FwdChannelId { get; set; }
+    [JsonIgnore] public int? FwdMessageId { get; set; }
 }
 
 public class OpenAiCompletionResponse

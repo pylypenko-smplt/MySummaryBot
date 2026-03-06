@@ -199,6 +199,29 @@ public class AiService(HttpClient httpClient)
         return await MakeApiRequest(requestBody);
     }
 
+    const string DefaultDigestPrompt =
+        "Your task: summarize what a specific user wrote in this group chat over the last 24 hours.\n" +
+        "- Use bullet points grouped by topic\n" +
+        "- Note their mood or tone if notable\n" +
+        "- Keep it concise, under 300 words\n" +
+        "- Refer to the user by their name";
+
+    public async Task<string> GetDigest(List<MessageModel> msgs, string displayName)
+    {
+        var formatted = JsonSerializer.Serialize(msgs);
+        var requestBody = new
+        {
+            model = Model,
+            messages = new[]
+            {
+                new { role = "system", content = SystemPrompt + "\n\n" + DefaultDigestPrompt },
+                new { role = "user", content = $"User: {displayName}\nMessages:\n{formatted}" }
+            },
+            max_completion_tokens = 1024
+        };
+        return await MakeApiRequest(requestBody, appendCost: false);
+    }
+
     async Task<string> MakeApiRequest(object request, bool appendCost = true)
     {
         var response = await httpClient.PostAsync(

@@ -21,13 +21,19 @@ var httpClient = new HttpClient();
 httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
 httpClient.Timeout = TimeSpan.FromMinutes(10);
 
+var ogHttpClient = new HttpClient();
+ogHttpClient.Timeout = TimeSpan.FromSeconds(3);
+ogHttpClient.DefaultRequestHeaders.Add("User-Agent", "MySummaryBot/2.0");
+
+var dbPath = Path.Combine(Environment.GetEnvironmentVariable("DATA_DIR") ?? "/data", "mysummarybot.db");
+using var store = new MessageStore(dbPath);
+
 var ai = new AiService(httpClient);
-var store = new MessageStore();
 
 try
 {
     var botClient = new TelegramBotClient(token);
-    var bot = new BotService(botClient, ai, store, adminChatId);
+    var bot = new BotService(botClient, ai, store, adminChatId, ogHttpClient);
     var cts = new CancellationTokenSource();
 
     Console.CancelKeyPress += (_, e) =>
@@ -39,6 +45,8 @@ try
     await botClient.SetMyCommands([
         new BotCommand { Command = "summary", Description = "Підсумок за останню годину" },
         new BotCommand { Command = "summary_day", Description = "Підсумок за останні 24 години" },
+        new BotCommand { Command = "stats", Description = "Активність учасників за 24г" },
+        new BotCommand { Command = "digest", Description = "Дайджест учасника: /digest @username" },
         new BotCommand { Command = "question", Description = "Задати питання боту" },
         new BotCommand { Command = "respect", Description = "Виміряти рівень поваги" },
         new BotCommand { Command = "vote", Description = "Голосування за зустріч" },

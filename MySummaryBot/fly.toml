@@ -14,3 +14,7 @@ primary_region = 'ams'
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
+
+[[mounts]]
+  source = "mysummarybot_data"
+  destination = "/data"

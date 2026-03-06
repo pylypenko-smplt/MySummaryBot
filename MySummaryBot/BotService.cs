@@ -2,7 +2,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 
-public class BotService(TelegramBotClient botClient, AiService ai, MessageStore store, string? adminChatId)
+public class BotService(TelegramBotClient botClient, AiService ai, MessageStore store, string? adminChatId, HttpClient ogHttpClient)
 {
     readonly Random _rnd = new();
 
@@ -39,6 +39,30 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                 try
                 {
                     store.ClearOld();
+
+                    var utcNow = DateTime.UtcNow;
+                    if (utcNow.Hour == 0 && utcNow.Minute == 0)
+                    {
+                        var today = utcNow.Date.ToString("yyyy-MM-dd");
+                        var activeChats = store.GetActiveChats(utcNow.Date);
+                        foreach (var digestChatId in activeChats)
+                        {
+                            if (store.HasDigestBeenSent(digestChatId, today)) continue;
+                            store.MarkDigestSent(digestChatId, today);
+                            try
+                            {
+                                var msgs = store.GetMessages(digestChatId, TimeSpan.FromHours(24));
+                                if (msgs.Count == 0) continue;
+                                var summary = await ai.GetSummary(msgs);
+                                await botClient.SendMessage(digestChatId, "Дайджест дня:\n\n" + summary, cancellationToken: token);
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"[Digest Error] chatId={digestChatId}: {ex.Message}");
+                                await SendAdmin($"[Digest Error] chatId={digestChatId}: {ex.Message}", token);
+                            }
+                        }
+                    }
                 }
                 catch (Exception e)
                 {
@@ -71,13 +95,14 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                 return;
 
             var messageText = update.Message.Text ?? update.Message.Caption;
-            if (messageText == null)
+            var mediaType = GetMediaType(update.Message);
+            if (messageText == null && mediaType == null)
                 return;
 
             var chatId = update.Message.Chat.Id;
             var replyParams = new ReplyParameters { MessageId = update.Message.MessageId };
 
-            if (!messageText.Contains("http") && messageText.Split(' ').Any(t => t.Length > 100))
+            if (messageText != null && !messageText.Contains("http") && messageText.Split(' ').Any(t => t.Length > 100))
             {
                 await bot.SendMessage(chatId, "Друже, ти дурачок?", replyParameters: replyParams, cancellationToken: cancellationToken);
                 return;
@@ -101,19 +126,45 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                 Username = update.Message.From?.Username,
                 Language = update.Message.From?.LanguageCode,
                 FirstName = userName,
-                Timestamp = DateTime.Now,
+                Timestamp = DateTime.UtcNow,
                 Text = messageText,
                 ReplyToMessageId = update.Message.ReplyToMessage?.Id
             };
 
-            if (!message.Text!.StartsWith('/'))
+            message.MediaType = mediaType;
+            var rawUrl = UrlHelper.ExtractFirstUrl(update.Message);
+            message.UrlNormalized = rawUrl != null ? UrlHelper.Normalize(rawUrl) : null;
+            if (update.Message.ForwardOrigin is MessageOriginChannel originChannel)
+            {
+                message.FwdChannelId = originChannel.Chat.Id;
+                message.FwdMessageId = originChannel.MessageId;
+            }
+
+            var isCommand = update.Message.Text?.StartsWith('/') == true && mediaType == null;
+            if (!isCommand)
+            {
                 store.AddMessage(message);
 
-            if (_rnd.Next(0, 500) == 0)
-                await bot.SendMessage(chatId, "Друже, ти дурачок?", replyParameters: replyParams, cancellationToken: cancellationToken);
+                var dupCount = 0;
+                if (message.UrlNormalized != null)
+                    dupCount = store.CountUrlOccurrences(chatId, message.UrlNormalized);
+                else if (message.FwdChannelId != null)
+                    dupCount = store.CountFwdOccurrences(chatId, message.FwdChannelId.Value, message.FwdMessageId!.Value);
+                if (dupCount > 1)
+                    await bot.SendMessage(chatId, dupCount.ToString(), replyParameters: replyParams, cancellationToken: cancellationToken);
+
+                if (rawUrl != null && !UrlHelper.IsSkippedDomain(rawUrl))
+                    _ = FetchAndStoreLinkPreviewAsync(chatId, message.MessageId, rawUrl);
+            }
 
             if (userId == 5612311136)
                 return;
+
+            if (messageText == null)
+                return;
+
+            if (_rnd.Next(0, 500) == 0)
+                await bot.SendMessage(chatId, "Друже, ти дурачок?", replyParameters: replyParams, cancellationToken: cancellationToken);
 
             if ((messageText.Contains("twingo", StringComparison.InvariantCultureIgnoreCase) ||
                  messageText.Contains("твінго", StringComparison.InvariantCultureIgnoreCase) ||
@@ -130,6 +181,9 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                 await bot.SendMessage(chatId, messageText.Replace("сенс", "ланос", StringComparison.InvariantCultureIgnoreCase), replyParameters: replyParams, cancellationToken: cancellationToken);
             if (messageText.Contains("sens", StringComparison.InvariantCultureIgnoreCase))
                 await bot.SendMessage(chatId, messageText.Replace("sens", "lanos", StringComparison.InvariantCultureIgnoreCase), replyParameters: replyParams, cancellationToken: cancellationToken);
+
+            if (mediaType != null)
+                return;
 
             if (messageText.StartsWith("/підсумок_день") || messageText.StartsWith("/summary_day"))
             {
@@ -167,23 +221,70 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
             }
             else if (messageText.StartsWith("/підсумок") || messageText.StartsWith("/summary"))
             {
-                var msgs = store.GetMessages(chatId, TimeSpan.FromHours(1));
+                var parts = messageText.Split(' ');
+                var hours = 1;
+                if (parts.Length > 1 && int.TryParse(parts[1], out var n))
+                    hours = Math.Clamp(n, 1, 720);
+                var msgs = store.GetMessages(chatId, TimeSpan.FromHours(hours));
                 if (msgs.Count == 0)
                 {
-                    await bot.SendMessage(chatId, "Немає повідомлень за останню годину.", replyParameters: replyParams, cancellationToken: cancellationToken);
+                    await bot.SendMessage(chatId, "Немає повідомлень за вказаний період.", replyParameters: replyParams, cancellationToken: cancellationToken);
                     return;
                 }
-                await bot.SendMessage(chatId, $"Читаю ваші {msgs.Count} повідомлень, зачекайте трохи...", cancellationToken: cancellationToken);
+                var totalCount = msgs.Count;
+                if (msgs.Count > 2000) msgs = msgs.TakeLast(2000).ToList();
+                await bot.SendMessage(chatId, $"Читаю ваші {totalCount} повідомлень, зачекайте трохи...", cancellationToken: cancellationToken);
                 try
                 {
-                    var summary = await ai.GetSummaryHour(msgs);
-                    await bot.SendMessage(chatId, summary, cancellationToken: cancellationToken);
+                    var prefix = totalCount > 2000 ? $"(показано останні 2000 з {totalCount} повідомлень)\n\n" : "";
+                    var summary = hours == 1 ? await ai.GetSummaryHour(msgs) : await ai.GetSummary(msgs);
+                    await bot.SendMessage(chatId, prefix + summary, cancellationToken: cancellationToken);
                 }
                 catch (Exception)
                 {
                     await bot.SendMessage(chatId, "Не вдалося згенерувати підсумок, спробуйте ще раз трохи пізніше", cancellationToken: cancellationToken);
                     throw;
                 }
+            }
+            else if (messageText.StartsWith("/stats") || messageText.StartsWith("/статистика"))
+            {
+                var stats = store.GetStats(chatId, TimeSpan.FromHours(24));
+                if (stats.Count == 0)
+                {
+                    await bot.SendMessage(chatId, "Немає повідомлень за останні 24 години.", cancellationToken: cancellationToken);
+                    return;
+                }
+                var lines = stats.Select((s, i) =>
+                {
+                    var name = s.FirstName ?? s.Username ?? "Unknown";
+                    var handle = s.Username != null ? $" (@{s.Username})" : "";
+                    return $"{i + 1}. {name}{handle} — {s.Count} повідомлень";
+                });
+                await bot.SendMessage(chatId, "Активність за 24 години:\n\n" + string.Join("\n", lines), cancellationToken: cancellationToken);
+            }
+            else if (messageText.StartsWith("/digest") || messageText.StartsWith("/дайджест"))
+            {
+                var parts = messageText.Split(' ');
+                if (parts.Length < 2 || !parts[1].StartsWith("@"))
+                {
+                    await bot.SendMessage(chatId, "Вкажіть юзернейм: /digest @username", cancellationToken: cancellationToken);
+                    return;
+                }
+                var handle = parts[1].TrimStart('@');
+                var foundUserId = store.FindUserId(chatId, handle);
+                if (foundUserId == null)
+                {
+                    await bot.SendMessage(chatId, $"Не знайшов @{handle} в чаті за останні 24 години.", cancellationToken: cancellationToken);
+                    return;
+                }
+                var msgs = store.GetUserMessages(chatId, foundUserId.Value, TimeSpan.FromHours(24));
+                if (msgs.Count == 0)
+                {
+                    await bot.SendMessage(chatId, $"Не знайшов повідомлень від @{handle} за останні 24 години.", cancellationToken: cancellationToken);
+                    return;
+                }
+                var answer = await ai.GetDigest(msgs, parts[1]);
+                await bot.SendMessage(chatId, answer, replyParameters: replyParams, cancellationToken: cancellationToken);
             }
             else if (messageText.StartsWith("/питання") || messageText.StartsWith("/question") || messageText.StartsWith("@revverb_bot"))
             {
@@ -253,8 +354,10 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
             else if (messageText.StartsWith("/допомога") || messageText.StartsWith("/help"))
             {
                 var helpMessage =
-                    "/summary (/підсумок) - підсумок за останню годину\n" +
+                    "/summary (/підсумок) [N] - підсумок за N годин (за замовч. 1г)\n" +
                     "/summary_day (/підсумок_день) - підсумок за останні 24 години\n" +
+                    "/stats (/статистика) - активність учасників за 24 години\n" +
+                    "/digest @username (/дайджест) - що написав учасник за 24 години\n" +
                     "/question (/питання) [питання] - відповідь на питання\n" +
                     "  також можна тегнути @revverb_bot з питанням\n" +
                     "/respect (/повага) - виміряти рівень поваги\n" +
@@ -363,6 +466,29 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
         var emsg = $"[HandleErrorAsync] {exception.Message}; \n {exception.StackTrace}";
         Console.WriteLine(emsg);
         await SendAdmin(emsg, cancellationToken);
+    }
+
+    async Task FetchAndStoreLinkPreviewAsync(long chatId, int msgId, string url)
+    {
+        try
+        {
+            var title = await OgFetcher.FetchTitle(url, ogHttpClient);
+            if (title != null) store.UpdateLinkPreview(chatId, msgId, title);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[OgFetch Error] {ex.Message}");
+        }
+    }
+
+    static string? GetMediaType(Telegram.Bot.Types.Message msg)
+    {
+        if (msg.Photo != null) return "photo";
+        if (msg.Video != null) return "video";
+        if (msg.Sticker != null) return "sticker";
+        if (msg.Document != null) return "document";
+        if (msg.Voice != null) return "voice";
+        return null;
     }
 
     static async Task<bool> IsUserAdminOrOwnerAsync(ITelegramBotClient bot, long chatId, long userId)
