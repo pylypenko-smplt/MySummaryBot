@@ -31,8 +31,8 @@ public class AiService(HttpClient httpClient)
         "Output format:\n" +
         "1. Overall chat vibe: X/10\n" +
         "2. Per-user list sorted by score (descending):\n" +
-        "   Пан Олексій (@alex): 8/10 — допомагав з кодом, жартував\n" +
-        "   Пані Марія (@maria): 6/10 — мало писала, але по справі\n\n" +
+        "   Пан Олексій (alex): 8/10 — допомагав з кодом, жартував\n" +
+        "   Пані Марія (maria): 6/10 — мало писала, але по справі\n\n" +
         "Keep reasoning short, factual, per-user only. No general commentary.";
 
     const string DefaultAnswerPrompt =

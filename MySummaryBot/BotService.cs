@@ -257,7 +257,7 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                 var lines = stats.Select((s, i) =>
                 {
                     var name = s.FirstName ?? s.Username ?? "Unknown";
-                    var handle = s.Username != null ? $" (@{s.Username})" : "";
+                    var handle = s.Username != null ? $" ({s.Username})" : "";
                     return $"{i + 1}. {name}{handle} — {s.Count} повідомлень";
                 });
                 await bot.SendMessage(chatId, "Активність за 24 години:\n\n" + string.Join("\n", lines), cancellationToken: cancellationToken);
@@ -274,13 +274,13 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                 var foundUserId = store.FindUserId(chatId, handle);
                 if (foundUserId == null)
                 {
-                    await bot.SendMessage(chatId, $"Не знайшов @{handle} в чаті за останні 24 години.", cancellationToken: cancellationToken);
+                    await bot.SendMessage(chatId, $"Не знайшов {handle} в чаті за останні 24 години.", cancellationToken: cancellationToken);
                     return;
                 }
                 var msgs = store.GetUserMessages(chatId, foundUserId.Value, TimeSpan.FromHours(24));
                 if (msgs.Count == 0)
                 {
-                    await bot.SendMessage(chatId, $"Не знайшов повідомлень від @{handle} за останні 24 години.", cancellationToken: cancellationToken);
+                    await bot.SendMessage(chatId, $"Не знайшов повідомлень від {handle} за останні 24 години.", cancellationToken: cancellationToken);
                     return;
                 }
                 var answer = await ai.GetDigest(msgs, parts[1]);
