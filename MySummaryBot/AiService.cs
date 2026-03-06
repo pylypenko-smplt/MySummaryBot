@@ -3,46 +3,57 @@ using System.Text.Json;
 
 public class AiService(HttpClient httpClient)
 {
+    // Models: summary tasks use fast non-reasoning model; analysis uses reasoning model
+    public const string DefaultModel = "gpt-4.1-mini";
+    const string AnalysisModel = "gpt-5-mini";
+    const string SmartModel = "gpt-5.2";
+
     const string SystemPrompt =
-        "You are a witty Ukrainian-speaking chat assistant for the revverb community — a friend group. " +
-        "You're casual, concise, and have a dry sense of humor. " +
-        "Always respond in Ukrainian. Address people as Пан or Пані.";
+        "You are a witty Ukrainian-speaking assistant for the revverb friend group chat. " +
+        "Be casual, sharp, and concise. Always respond in Ukrainian. " +
+        "Use Пан/Пані when addressing people. Skip formalities — this is an informal chat among friends.";
 
     const string DefaultSummaryPrompt =
-        "Your task: summarize a group chat conversation.\n" +
-        "- Use bullet points grouped by topic, not chronologically by message\n" +
-        "- Focus on key topics, decisions, and notable events\n" +
-        "- Keep it concise — skip greetings, small talk, and reactions\n" +
-        "- If someone made a memorable joke or statement, briefly note it";
+        "Summarize this group chat. Be concise.\n" +
+        "- Group by topic (not chronologically)\n" +
+        "- **Bold topic name**, then bullet points underneath\n" +
+        "- Skip greetings, reactions, one-word replies\n" +
+        "- Note decisions, plans, links shared, and memorable moments\n" +
+        "- If the chat was quiet or boring, say so in one line";
 
     const string DefaultRespectPrompt =
-        "Your task: evaluate the vibe level (повага) of each chat participant on a 0–10 scale.\n\n" +
+        "Your task: evaluate the вайб (повага) of each chat participant on a 0–10 scale.\n\n" +
         "Rules:\n" +
         "- Good vibes, helpfulness, constructive discussion = high повага\n" +
         "- Negativity, trolling, toxicity = low повага\n" +
-        "- Obscene words and playful teasing are normal in this informal chat — don't penalize them\n" +
+        "- Obscene words and playful teasing are normal in this chat — don't penalize them\n" +
         "- Use Пан for men, Пані for women, Паніні if gender is unknown\n\n" +
         "Output format:\n" +
         "1. Overall chat vibe: X/10\n" +
         "2. Per-user list sorted by score (descending):\n" +
         "   Пан Олексій (@alex): 8/10 — допомагав з кодом, жартував\n" +
         "   Пані Марія (@maria): 6/10 — мало писала, але по справі\n\n" +
-        "Keep reasoning short, factual, per-user only. No general commentary or meta-analysis.";
+        "Keep reasoning short, factual, per-user only. No general commentary.";
 
     const string DefaultAnswerPrompt =
-        "Your task: answer a question from the chat.\n" +
+        "Answer a question from the chat.\n" +
         "- Be direct and concise — no disclaimers or preambles\n" +
-        "- If you don't know, say so honestly — no speculation\n" +
-        "- If reply context is provided, use it to understand what the question is about\n" +
+        "- If you don't know, say so honestly\n" +
+        "- If reply context is provided, use it\n" +
         "- Match the casual tone of a friend group chat";
 
     const string ChunkSummaryPrompt =
-        "Your task: extract key points from a portion of a group chat.\n" +
-        "- Maximum 10 bullet points\n" +
-        "- Focus on topics, decisions, and notable events\n" +
-        "- Refer to people as Пан or Пані";
+        "Extract key points from this chat segment. Max 8 bullets.\n" +
+        "Focus on: topics discussed, decisions made, links/resources shared.\n" +
+        "Skip small talk and reactions.";
 
-    public const string DefaultModel = "gpt-5-mini";
+    const string DefaultDigestPrompt =
+        "Summarize what this user wrote in the chat today.\n" +
+        "- What topics did they bring up?\n" +
+        "- What was their mood and energy?\n" +
+        "- Any notable contributions: jokes, insights, help given?\n" +
+        "- Keep it under 200 words, casual tone\n" +
+        "- Refer to the user by their first name";
 
     public string SummaryPrompt { get; set; } = DefaultSummaryPrompt;
     public string RespectPrompt { get; set; } = DefaultRespectPrompt;
@@ -56,17 +67,15 @@ public class AiService(HttpClient httpClient)
 
     public async Task<string> GetRespectLevel(List<MessageModel> messagesForRespect)
     {
-        var formattedMessages = JsonSerializer.Serialize(messagesForRespect);
-
         var requestBody = new
         {
-            model = Model,
+            model = AnalysisModel,
             messages = new[]
             {
                 new { role = "system", content = SystemPrompt + "\n\n" + RespectPrompt },
-                new { role = "user", content = $"Messages:\n{formattedMessages}" }
+                new { role = "user", content = $"Messages:\n{FormatMessages(messagesForRespect)}" }
             },
-            max_completion_tokens = 4096
+            max_completion_tokens = 8192
         };
 
         return await MakeApiRequest(requestBody);
@@ -110,15 +119,13 @@ public class AiService(HttpClient httpClient)
 
     public async Task<string> GetSummaryHour(List<MessageModel> msgs, string? promptOverride = null)
     {
-        var formattedMessages = JsonSerializer.Serialize(msgs);
-
         var requestBody = new
         {
             model = Model,
             messages = new[]
             {
                 new { role = "system", content = SystemPrompt + "\n\n" + (promptOverride ?? SummaryPrompt) },
-                new { role = "user", content = $"Messages:\n{formattedMessages}" }
+                new { role = "user", content = $"Messages:\n{FormatMessages(msgs)}" }
             },
             max_completion_tokens = 4096
         };
@@ -128,8 +135,6 @@ public class AiService(HttpClient httpClient)
 
     public async Task<string> GetAnswer(MessageModel message, MessageModel? replyMessage = null)
     {
-        const string smartModel = "gpt-5.2";
-
         var userContent = new StringBuilder();
         userContent.AppendLine($"Author: {message.FirstName}");
         userContent.AppendLine(message.Text);
@@ -143,7 +148,7 @@ public class AiService(HttpClient httpClient)
 
         var requestBody = new
         {
-            model = smartModel,
+            model = SmartModel,
             temperature = 0.3,
             messages = new[]
             {
@@ -156,19 +161,32 @@ public class AiService(HttpClient httpClient)
         return await MakeApiRequest(requestBody);
     }
 
+    public async Task<string> GetDigest(List<MessageModel> msgs, string displayName)
+    {
+        var requestBody = new
+        {
+            model = AnalysisModel,
+            messages = new[]
+            {
+                new { role = "system", content = SystemPrompt + "\n\n" + DefaultDigestPrompt },
+                new { role = "user", content = $"User: {displayName}\nMessages:\n{FormatMessages(msgs)}" }
+            },
+            max_completion_tokens = 8192
+        };
+        return await MakeApiRequest(requestBody, appendCost: false);
+    }
+
     async Task<string> GetChunkSummary(List<MessageModel> chunk)
     {
-        var formattedMessages = JsonSerializer.Serialize(chunk);
-
         var requestBody = new
         {
             model = Model,
             messages = new[]
             {
                 new { role = "system", content = SystemPrompt + "\n\n" + ChunkSummaryPrompt },
-                new { role = "user", content = $"Messages:\n{formattedMessages}" }
+                new { role = "user", content = $"Messages:\n{FormatMessages(chunk)}" }
             },
-            max_completion_tokens = 8192
+            max_completion_tokens = 4096
         };
 
         return await MakeApiRequest(requestBody, appendCost: false);
@@ -199,27 +217,28 @@ public class AiService(HttpClient httpClient)
         return await MakeApiRequest(requestBody);
     }
 
-    const string DefaultDigestPrompt =
-        "Your task: summarize what a specific user wrote in this group chat over the last 24 hours.\n" +
-        "- Use bullet points grouped by topic\n" +
-        "- Note their mood or tone if notable\n" +
-        "- Keep it concise, under 300 words\n" +
-        "- Refer to the user by their name";
-
-    public async Task<string> GetDigest(List<MessageModel> msgs, string displayName)
+    static string FormatMessages(List<MessageModel> msgs)
     {
-        var formatted = JsonSerializer.Serialize(msgs);
-        var requestBody = new
+        var sb = new StringBuilder();
+        foreach (var m in msgs)
         {
-            model = Model,
-            messages = new[]
-            {
-                new { role = "system", content = SystemPrompt + "\n\n" + DefaultDigestPrompt },
-                new { role = "user", content = $"User: {displayName}\nMessages:\n{formatted}" }
-            },
-            max_completion_tokens = 8192
-        };
-        return await MakeApiRequest(requestBody, appendCost: false);
+            var name = m.FirstName ?? m.Username ?? "Unknown";
+            var time = m.Timestamp.ToString("HH:mm");
+
+            var line = new StringBuilder($"[{time}] {name}");
+
+            if (m.MediaType != null)
+                line.Append($" [{m.MediaType}]");
+
+            if (m.Text != null)
+                line.Append($": {m.Text}");
+
+            if (m.LinkPreview != null)
+                line.Append($" 🔗 {m.LinkPreview}");
+
+            sb.AppendLine(line.ToString());
+        }
+        return sb.ToString();
     }
 
     async Task<string> MakeApiRequest(object request, bool appendCost = true)
@@ -241,23 +260,23 @@ public class AiService(HttpClient httpClient)
         if (string.IsNullOrWhiteSpace(resp))
             throw new Exception("Empty response from OpenAI API. Raw response: " + rawResponse);
 
-        var (inputPricePerToken, outputPricePerToken) = completion?.Model switch
-        {
-            "gpt-5" or "gpt-5.1" or "gpt-5.2" => (0.00000125m, 0.00001m),
-            "gpt-5-mini" => (0.00000025m, 0.000002m),
-            "gpt-5-nano" => (0.00000005m, 0.0000004m),
-            "gpt-4.1" or "gpt-4o" => (0.0000025m, 0.00001m),
-            "gpt-4.1-mini" or "gpt-4o-mini" => (0.0000003m, 0.0000012m),
-            _ => (0.00000125m, 0.00001m)
-        };
-
-        var promptTokens = completion?.Usage?.PromptTokens ?? 0;
-        var completionTokens = completion?.Usage?.CompletionTokens ?? 0;
-
         if (appendCost)
         {
-            var costUsd = promptTokens * inputPricePerToken + completionTokens * outputPricePerToken;
-            var costUah = costUsd * 44.50m;
+            var (inputPrice, outputPrice) = completion?.Model switch
+            {
+                var m when m?.StartsWith("gpt-5-nano") == true    => (0.00000005m, 0.0000004m),
+                var m when m?.StartsWith("gpt-5-mini") == true    => (0.00000025m, 0.000002m),
+                var m when m?.StartsWith("gpt-5") == true         => (0.00000125m, 0.00001m),
+                var m when m?.StartsWith("gpt-4.1-mini") == true  => (0.0000003m,  0.0000012m),
+                var m when m?.StartsWith("gpt-4.1") == true       => (0.0000025m,  0.00001m),
+                var m when m?.StartsWith("gpt-4o-mini") == true   => (0.0000003m,  0.0000012m),
+                var m when m?.StartsWith("gpt-4o") == true        => (0.0000025m,  0.00001m),
+                _                                                  => (0.00000125m, 0.00001m)
+            };
+
+            var promptTokens = completion?.Usage?.PromptTokens ?? 0;
+            var completionTokens = completion?.Usage?.CompletionTokens ?? 0;
+            var costUah = (promptTokens * inputPrice + completionTokens * outputPrice) * 44.50m;
             resp += $"\n\n*Витрачено: {costUah:F2} грн*";
         }
 
