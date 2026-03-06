@@ -173,7 +173,7 @@ public class AiService(HttpClient httpClient)
             },
             max_completion_tokens = 8192
         };
-        return await MakeApiRequest(requestBody, appendCost: false);
+        return await MakeApiRequest(requestBody);
     }
 
     async Task<string> GetChunkSummary(List<MessageModel> chunk)
