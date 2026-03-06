@@ -30,16 +30,7 @@ public static class UrlHelper
             var host = uri.Host.ToLower();
             var path = uri.AbsolutePath.TrimEnd('/');
 
-            var query = HttpUtility.ParseQueryString(uri.Query);
-            foreach (var key in query.AllKeys.Where(k => k != null && k.StartsWith("utm_")).ToList())
-                query.Remove(key);
-
-            var normalized = host + path;
-            var queryString = query.ToString();
-            if (!string.IsNullOrEmpty(queryString))
-                normalized += "?" + queryString;
-
-            return normalized;
+            return host + path;
         }
         catch
         {

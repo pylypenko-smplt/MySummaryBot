@@ -168,7 +168,7 @@ public class AiService(HttpClient httpClient)
                 new { role = "system", content = SystemPrompt + "\n\n" + ChunkSummaryPrompt },
                 new { role = "user", content = $"Messages:\n{formattedMessages}" }
             },
-            max_completion_tokens = 2048
+            max_completion_tokens = 8192
         };
 
         return await MakeApiRequest(requestBody, appendCost: false);
@@ -217,7 +217,7 @@ public class AiService(HttpClient httpClient)
                 new { role = "system", content = SystemPrompt + "\n\n" + DefaultDigestPrompt },
                 new { role = "user", content = $"User: {displayName}\nMessages:\n{formatted}" }
             },
-            max_completion_tokens = 1024
+            max_completion_tokens = 8192
         };
         return await MakeApiRequest(requestBody, appendCost: false);
     }
