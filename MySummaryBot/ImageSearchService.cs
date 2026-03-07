@@ -3,15 +3,12 @@ using System.Text.Json.Serialization;
 
 public class ImageSearchService(HttpClient httpClient)
 {
-    const string RussianSiteExclusions =
-        "-site:.ru -site:.by -site:yandex.com -site:livejournal.com";
-
     internal async Task<List<ImageResult>> SearchAsync(string query, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(query))
             return [];
 
-        var q = Uri.EscapeDataString(query + " " + RussianSiteExclusions);
+        var q = Uri.EscapeDataString(query);
         var url = $"https://api.search.brave.com/res/v1/images/search?q={q}&count=20&safesearch=moderate";
 
         var response = await httpClient.GetAsync(url, ct);
