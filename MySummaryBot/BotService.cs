@@ -101,6 +101,9 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
             if (update.Message == null)
                 return;
 
+            if (update.Message.ViaBot != null)
+                return;
+
             var messageText = update.Message.Text ?? update.Message.Caption;
             var mediaType = GetMediaType(update.Message);
             if (messageText == null && mediaType == null)
