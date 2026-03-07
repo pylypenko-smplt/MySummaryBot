@@ -25,6 +25,14 @@ var ogHttpClient = new HttpClient();
 ogHttpClient.Timeout = TimeSpan.FromSeconds(3);
 ogHttpClient.DefaultRequestHeaders.Add("User-Agent", "MySummaryBot/2.0");
 
+var braveSearchKey = Environment.GetEnvironmentVariable("BRAVE_SEARCH_KEY") ?? "";
+if (string.IsNullOrEmpty(braveSearchKey))
+    Console.WriteLine("Warning: BRAVE_SEARCH_KEY not set — inline image search will not work");
+var braveHttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+braveHttpClient.DefaultRequestHeaders.Add("X-Subscription-Token", braveSearchKey);
+braveHttpClient.DefaultRequestHeaders.Add("Accept", "application/json");
+var imageSearch = new ImageSearchService(braveHttpClient);
+
 var dbPath = Path.Combine(Environment.GetEnvironmentVariable("DATA_DIR") ?? "/data", "mysummarybot.db");
 using var store = new MessageStore(dbPath);
 
@@ -33,7 +41,7 @@ var ai = new AiService(httpClient);
 try
 {
     var botClient = new TelegramBotClient(token);
-    var bot = new BotService(botClient, ai, store, adminChatId, ogHttpClient);
+    var bot = new BotService(botClient, ai, store, adminChatId, ogHttpClient, imageSearch);
     var cts = new CancellationTokenSource();
 
     Console.CancelKeyPress += (_, e) =>

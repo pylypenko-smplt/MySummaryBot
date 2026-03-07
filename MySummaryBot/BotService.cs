@@ -1,8 +1,9 @@
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.InlineQueryResults;
 
-public class BotService(TelegramBotClient botClient, AiService ai, MessageStore store, string? adminChatId, HttpClient ogHttpClient)
+public class BotService(TelegramBotClient botClient, AiService ai, MessageStore store, string? adminChatId, HttpClient ogHttpClient, ImageSearchService imageSearch)
 {
     readonly Random _rnd = new();
 
@@ -91,6 +92,12 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
     {
         try
         {
+            if (update.InlineQuery != null)
+            {
+                await HandleInlineQueryAsync(update.InlineQuery, cancellationToken);
+                return;
+            }
+
             if (update.Message == null)
                 return;
 
@@ -458,6 +465,43 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
         {
             Console.WriteLine($"[HandleUpdateAsync Error] {e.Message}");
             await SendAdmin("Error: " + e.Message);
+        }
+    }
+
+    async Task HandleInlineQueryAsync(InlineQuery inlineQuery, CancellationToken ct)
+    {
+        try
+        {
+            var q = inlineQuery.Query ?? "";
+            if (!q.StartsWith("pic ", StringComparison.OrdinalIgnoreCase))
+            {
+                await botClient.AnswerInlineQuery(inlineQuery.Id, [], cancellationToken: ct);
+                return;
+            }
+
+            var searchTerm = q["pic ".Length..].Trim();
+            if (string.IsNullOrEmpty(searchTerm))
+            {
+                await botClient.AnswerInlineQuery(inlineQuery.Id, [], cancellationToken: ct);
+                return;
+            }
+
+            var images = await imageSearch.SearchAsync(searchTerm, ct);
+            var results = images.Select((img, i) => new InlineQueryResultPhoto(
+                i.ToString(), img.ImageUrl, img.ThumbnailUrl)
+            {
+                PhotoWidth = img.Width > 0 ? img.Width : null,
+                PhotoHeight = img.Height > 0 ? img.Height : null,
+                Title = img.Title
+            });
+
+            await botClient.AnswerInlineQuery(inlineQuery.Id, results, cacheTime: 300, cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Inline query error: {ex.Message}");
+            try { await botClient.AnswerInlineQuery(inlineQuery.Id, [], cancellationToken: CancellationToken.None); }
+            catch { /* ignore */ }
         }
     }
 
