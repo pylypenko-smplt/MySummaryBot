@@ -9,7 +9,7 @@ public class ImageSearchService(HttpClient httpClient)
             return [];
 
         var q = Uri.EscapeDataString(query);
-        var url = $"https://api.search.brave.com/res/v1/images/search?q={q}&count=20&safesearch=moderate";
+        var url = $"https://api.search.brave.com/res/v1/images/search?q={q}&count=20&safesearch=off";
 
         var response = await httpClient.GetAsync(url, ct);
         response.EnsureSuccessStatusCode();
