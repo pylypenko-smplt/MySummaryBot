@@ -22,6 +22,15 @@ public static class UrlHelper
         return null;
     }
 
+    // Domains where query params are tracking garbage and should be stripped
+    static readonly HashSet<string> _stripQueryDomains =
+    [
+        "instagram.com", "www.instagram.com",
+        "facebook.com", "www.facebook.com", "fb.com",
+        "tiktok.com", "www.tiktok.com", "vm.tiktok.com",
+        "twitter.com", "www.twitter.com", "x.com", "www.x.com",
+    ];
+
     public static string Normalize(string rawUrl)
     {
         try
@@ -30,7 +39,12 @@ public static class UrlHelper
             var host = uri.Host.ToLower();
             var path = uri.AbsolutePath.TrimEnd('/');
 
-            return host + path;
+            if (_stripQueryDomains.Contains(host))
+                return host + path;
+
+            return string.IsNullOrEmpty(uri.Query)
+                ? host + path
+                : host + path + uri.Query;
         }
         catch
         {
