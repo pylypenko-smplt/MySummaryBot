@@ -361,6 +361,39 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
 
                 await bot.SendPoll(chatId, "Коли збираємось?", options, false, allowsMultipleAnswers: true);
             }
+            else if (messageText.StartsWith("/readme"))
+            {
+                try
+                {
+                    var readmeUrl = "https://raw.githubusercontent.com/pylypenko-smplt/MySummaryBot/HEAD/README.md";
+                    var response = await ogHttpClient.GetAsync(readmeUrl, cancellationToken);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        await bot.SendMessage(chatId, "README не знайдено", replyParameters: replyParams, cancellationToken: cancellationToken);
+                        return;
+                    }
+
+                    var content = await response.Content.ReadAsStringAsync(cancellationToken);
+                    content = FormatReadme(content);
+
+                    if (content.Length <= 4096)
+                    {
+                        await bot.SendMessage(chatId, content, replyParameters: replyParams, cancellationToken: cancellationToken);
+                    }
+                    else
+                    {
+                        var truncated = content[..3900];
+                        var lastNl = truncated.LastIndexOf('\n');
+                        if (lastNl > 3000) truncated = truncated[..lastNl];
+                        await bot.SendMessage(chatId, truncated + "\n\n... (повний README: https://github.com/pylypenko-smplt/MySummaryBot#readme)", replyParameters: replyParams, cancellationToken: cancellationToken);
+                    }
+                }
+                catch (Exception)
+                {
+                    await bot.SendMessage(chatId, "Не вдалося завантажити README", replyParameters: replyParams, cancellationToken: cancellationToken);
+                    throw;
+                }
+            }
             else if (messageText.StartsWith("/допомога") || messageText.StartsWith("/help"))
             {
                 var helpMessage =
@@ -372,6 +405,7 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                     "  також можна тегнути @revverb_bot з питанням\n" +
                     "/respect (/повага) - виміряти рівень поваги\n" +
                     "/vote (/голосування) - голосування за зустріч (для адмінів)\n" +
+                    "/readme - README чату\n" +
                     "/help (/допомога) - показати цей список команд";
 
                 if (chatId.ToString() == adminChatId)
@@ -554,6 +588,39 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
         }
 
         return false;
+    }
+
+    static string FormatReadme(string content)
+    {
+        var lines = content.Split('\n');
+        var result = new List<string>();
+        var blankCount = 0;
+
+        foreach (var line in lines)
+        {
+            var trimmed = line.TrimEnd();
+
+            // Skip pure badge lines like [![alt](url)](url)
+            if (System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^\[?!\[.*?\]\(.*?\)\]?(\(.*?\))?$"))
+                continue;
+
+            // Skip HTML comments
+            if (trimmed.StartsWith("<!--") && trimmed.Contains("-->"))
+                continue;
+
+            if (string.IsNullOrEmpty(trimmed))
+            {
+                blankCount++;
+                if (blankCount <= 1) result.Add("");
+            }
+            else
+            {
+                blankCount = 0;
+                result.Add(trimmed);
+            }
+        }
+
+        return string.Join("\n", result).Trim();
     }
 
     static string GetRandomEmoji()

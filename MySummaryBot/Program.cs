@@ -58,6 +58,7 @@ try
         new BotCommand { Command = "question", Description = "Задати питання боту" },
         new BotCommand { Command = "respect", Description = "Виміряти рівень поваги" },
         new BotCommand { Command = "vote", Description = "Голосування за зустріч" },
+        new BotCommand { Command = "readme", Description = "README чату" },
         new BotCommand { Command = "help", Description = "Список команд" }
     ]);
 
