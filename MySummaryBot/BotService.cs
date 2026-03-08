@@ -378,14 +378,14 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
 
                     if (content.Length <= 4096)
                     {
-                        await bot.SendMessage(chatId, content, replyParameters: replyParams, cancellationToken: cancellationToken);
+                        await bot.SendMessage(chatId, content, parseMode: Telegram.Bot.Types.Enums.ParseMode.Html, replyParameters: replyParams, cancellationToken: cancellationToken);
                     }
                     else
                     {
                         var truncated = content[..3900];
                         var lastNl = truncated.LastIndexOf('\n');
                         if (lastNl > 3000) truncated = truncated[..lastNl];
-                        await bot.SendMessage(chatId, truncated + "\n\n... (повний README: https://github.com/pylypenko-smplt/MySummaryBot#readme)", replyParameters: replyParams, cancellationToken: cancellationToken);
+                        await bot.SendMessage(chatId, truncated, parseMode: Telegram.Bot.Types.Enums.ParseMode.Html, replyParameters: replyParams, cancellationToken: cancellationToken);
                     }
                 }
                 catch (Exception)
@@ -598,17 +598,46 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
 
         foreach (var line in lines)
         {
-            var trimmed = line.TrimEnd();
+            var t = line.TrimEnd();
 
-            // Skip pure badge lines like [![alt](url)](url)
-            if (System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^\[?!\[.*?\]\(.*?\)\]?(\(.*?\))?$"))
-                continue;
+            // Skip badge lines and HTML comments
+            if (System.Text.RegularExpressions.Regex.IsMatch(t, @"^\[?!\[.*?\]\(.*?\)\]?(\(.*?\))?$")) continue;
+            if (t.StartsWith("<!--") && t.Contains("-->")) continue;
 
-            // Skip HTML comments
-            if (trimmed.StartsWith("<!--") && trimmed.Contains("-->"))
-                continue;
+            // Horizontal rules → skip
+            if (System.Text.RegularExpressions.Regex.IsMatch(t, @"^---+$")) continue;
 
-            if (string.IsNullOrEmpty(trimmed))
+            // Escape HTML special chars first
+            t = t.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+
+            // # H1 → bold + uppercase
+            if (System.Text.RegularExpressions.Regex.IsMatch(t, @"^# "))
+            {
+                t = "<b>" + t[2..].ToUpper() + "</b>";
+            }
+            // ## H2 → bold
+            else if (System.Text.RegularExpressions.Regex.IsMatch(t, @"^## "))
+            {
+                t = "\n<b>" + t[3..] + "</b>";
+            }
+            // ### H3 → bold italic
+            else if (System.Text.RegularExpressions.Regex.IsMatch(t, @"^### "))
+            {
+                t = "<b><i>" + t[4..] + "</i></b>";
+            }
+            else
+            {
+                // **bold**
+                t = System.Text.RegularExpressions.Regex.Replace(t, @"\*\*(.+?)\*\*", "<b>$1</b>");
+                // `code`
+                t = System.Text.RegularExpressions.Regex.Replace(t, @"`(.+?)`", "<code>$1</code>");
+                // - list item → bullet
+                if (System.Text.RegularExpressions.Regex.IsMatch(t, @"^- "))
+                    t = "• " + t[2..];
+                // numbered list 1. 2. etc — keep as is
+            }
+
+            if (string.IsNullOrEmpty(t))
             {
                 blankCount++;
                 if (blankCount <= 1) result.Add("");
@@ -616,7 +645,7 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
             else
             {
                 blankCount = 0;
-                result.Add(trimmed);
+                result.Add(t);
             }
         }
 
