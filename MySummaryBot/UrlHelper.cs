@@ -22,13 +22,23 @@ public static class UrlHelper
         return null;
     }
 
-    // Domains where query params are tracking garbage and should be stripped
-    static readonly HashSet<string> _stripQueryDomains =
+    // Tracking params stripped from all URLs universally
+    static readonly HashSet<string> _trackingParams =
     [
-        "instagram.com", "www.instagram.com",
-        "facebook.com", "www.facebook.com", "fb.com",
-        "tiktok.com", "www.tiktok.com", "vm.tiktok.com",
-        "twitter.com", "www.twitter.com", "x.com", "www.x.com",
+        // UTM
+        "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
+        // auto.ria and similar r_* params
+        "r_source", "r_medium", "r_campaign", "r_audience",
+        // Meta / Facebook
+        "fbclid", "fb_action_ids", "fb_action_types",
+        // Instagram
+        "igsh", "igshid",
+        // Google
+        "gclid", "gclsrc", "dclid",
+        // TikTok
+        "_t", "_r",
+        // Other common trackers
+        "ref", "referrer", "source",
     ];
 
     public static string Normalize(string rawUrl)
@@ -39,12 +49,16 @@ public static class UrlHelper
             var host = uri.Host.ToLower();
             var path = uri.AbsolutePath.TrimEnd('/');
 
-            if (_stripQueryDomains.Contains(host))
+            if (string.IsNullOrEmpty(uri.Query))
                 return host + path;
 
-            return string.IsNullOrEmpty(uri.Query)
+            var qs = HttpUtility.ParseQueryString(uri.Query);
+            foreach (var key in _trackingParams)
+                qs.Remove(key);
+
+            return qs.Count == 0
                 ? host + path
-                : host + path + uri.Query;
+                : host + path + "?" + qs;
         }
         catch
         {
