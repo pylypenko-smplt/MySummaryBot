@@ -45,7 +45,7 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                     if (utcNow.Hour == 0 && utcNow.Minute == 0)
                     {
                         var today = utcNow.Date.ToString("yyyy-MM-dd");
-                        var activeChats = store.GetActiveChats(utcNow.Date);
+                        var activeChats = store.GetActiveChats(utcNow.AddHours(-24));
                         foreach (var digestChatId in activeChats)
                         {
                             if (store.HasDigestBeenSent(digestChatId, today)) continue;
@@ -410,7 +410,8 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
 
                 if (chatId.ToString() == adminChatId)
                     helpMessage +=
-                        "\n/prompt_summary [prompt] - змінити промпт для підсумки\n" +
+                        "\n/chats - список активних чатів за 24 години\n" +
+                        "/prompt_summary [prompt] - змінити промпт для підсумки\n" +
                         "/prompt_summary_reset - скинути промпт для підсумки\n" +
                         "/prompt_respect [prompt] - змінити промпт для вимірювання поваги\n" +
                         "/prompt_respect_reset - скинути промпт для вимірювання поваги\n" +
@@ -487,6 +488,33 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                     }
                     ai.Model = value;
                     await bot.SendMessage(chatId, "Model updated");
+                }
+                else if (messageText == "/chats")
+                {
+                    var chats = store.GetActiveChats(DateTime.UtcNow.AddHours(-24));
+                    if (chats.Count == 0)
+                    {
+                        await bot.SendMessage(chatId, "Активних чатів немає");
+                    }
+                    else
+                    {
+                        var lines = new List<string> { "Активні чати за 24г:" };
+                        foreach (var cid in chats)
+                        {
+                            try
+                            {
+                                var info = await bot.GetChat(cid, cancellationToken);
+                                var count = await bot.GetChatMemberCount(cid, cancellationToken);
+                                var name = info.Title ?? info.Username ?? info.FirstName ?? cid.ToString();
+                                lines.Add($"{name} ({count} уч.) — {cid}");
+                            }
+                            catch
+                            {
+                                lines.Add(cid.ToString());
+                            }
+                        }
+                        await bot.SendMessage(chatId, string.Join("\n", lines));
+                    }
                 }
                 else if (messageText.StartsWith("/"))
                 {
