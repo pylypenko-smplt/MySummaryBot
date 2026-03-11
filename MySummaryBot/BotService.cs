@@ -144,6 +144,9 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
             message.MediaType = mediaType;
             var rawUrl = UrlHelper.ExtractFirstUrl(update.Message);
             message.UrlNormalized = (rawUrl != null && !UrlHelper.IsInviteLink(rawUrl)) ? UrlHelper.Normalize(rawUrl) : null;
+            message.MediaUniqueId = update.Message.Photo?.Last().FileUniqueId
+                ?? update.Message.Video?.FileUniqueId
+                ?? update.Message.Document?.FileUniqueId;
             if (update.Message.ForwardOrigin is MessageOriginChannel originChannel)
             {
                 message.FwdChannelId = originChannel.Chat.Id;
@@ -160,6 +163,8 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                     dupCount = store.CountUrlOccurrences(chatId, message.UrlNormalized);
                 else if (message.FwdChannelId != null)
                     dupCount = store.CountFwdOccurrences(chatId, message.FwdChannelId.Value, message.FwdMessageId!.Value);
+                else if (message.MediaUniqueId != null)
+                    dupCount = store.CountMediaOccurrences(chatId, message.MediaUniqueId);
                 if (dupCount > 1)
                     await bot.SendMessage(chatId, dupCount.ToString(), replyParameters: replyParams, cancellationToken: cancellationToken);
 

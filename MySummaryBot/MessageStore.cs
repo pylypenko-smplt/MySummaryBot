@@ -33,8 +33,10 @@ public class MessageStore : IDisposable
             """);
         Execute("CREATE INDEX IF NOT EXISTS idx_chat_ts ON messages(chat_id, timestamp)");
         Execute("CREATE INDEX IF NOT EXISTS idx_chat_user ON messages(chat_id, user_id)");
+        TryExecute("ALTER TABLE messages ADD COLUMN media_unique_id TEXT");
         Execute("CREATE INDEX IF NOT EXISTS idx_url ON messages(chat_id, url_normalized) WHERE url_normalized IS NOT NULL");
         Execute("CREATE INDEX IF NOT EXISTS idx_fwd ON messages(chat_id, fwd_channel_id, fwd_message_id) WHERE fwd_channel_id IS NOT NULL");
+        Execute("CREATE INDEX IF NOT EXISTS idx_media ON messages(chat_id, media_unique_id) WHERE media_unique_id IS NOT NULL");
         Execute("CREATE INDEX IF NOT EXISTS idx_ts ON messages(timestamp)");
         Execute("CREATE INDEX IF NOT EXISTS idx_username ON messages(chat_id, username)");
         Execute("""
@@ -60,8 +62,8 @@ public class MessageStore : IDisposable
         {
             using var cmd = _connection.CreateCommand();
             cmd.CommandText = """
-                INSERT INTO messages (msg_id, chat_id, user_id, username, first_name, language, text, media_type, link_preview, url_normalized, fwd_channel_id, fwd_message_id, timestamp, reply_to)
-                VALUES (@msg_id, @chat_id, @user_id, @username, @first_name, @language, @text, @media_type, @link_preview, @url_normalized, @fwd_channel_id, @fwd_message_id, @timestamp, @reply_to)
+                INSERT INTO messages (msg_id, chat_id, user_id, username, first_name, language, text, media_type, link_preview, url_normalized, media_unique_id, fwd_channel_id, fwd_message_id, timestamp, reply_to)
+                VALUES (@msg_id, @chat_id, @user_id, @username, @first_name, @language, @text, @media_type, @link_preview, @url_normalized, @media_unique_id, @fwd_channel_id, @fwd_message_id, @timestamp, @reply_to)
                 """;
             cmd.Parameters.AddWithValue("@msg_id", msg.MessageId);
             cmd.Parameters.AddWithValue("@chat_id", msg.ChatId);
@@ -73,6 +75,7 @@ public class MessageStore : IDisposable
             cmd.Parameters.AddWithValue("@media_type", (object?)msg.MediaType ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@link_preview", (object?)msg.LinkPreview ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@url_normalized", (object?)msg.UrlNormalized ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@media_unique_id", (object?)msg.MediaUniqueId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@fwd_channel_id", (object?)msg.FwdChannelId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@fwd_message_id", (object?)msg.FwdMessageId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@timestamp", msg.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss"));
@@ -151,6 +154,18 @@ public class MessageStore : IDisposable
             cmd.Parameters.AddWithValue("@c", chatId);
             cmd.Parameters.AddWithValue("@fc", fwdChannelId);
             cmd.Parameters.AddWithValue("@fm", fwdMessageId);
+            return Convert.ToInt32(cmd.ExecuteScalar());
+        }
+    }
+
+    public int CountMediaOccurrences(long chatId, string mediaUniqueId)
+    {
+        lock (_lock)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM messages WHERE chat_id = @c AND media_unique_id = @m";
+            cmd.Parameters.AddWithValue("@c", chatId);
+            cmd.Parameters.AddWithValue("@m", mediaUniqueId);
             return Convert.ToInt32(cmd.ExecuteScalar());
         }
     }
@@ -270,6 +285,7 @@ public class MessageStore : IDisposable
                 MediaType = reader.IsDBNull(reader.GetOrdinal("media_type")) ? null : reader.GetString(reader.GetOrdinal("media_type")),
                 LinkPreview = reader.IsDBNull(reader.GetOrdinal("link_preview")) ? null : reader.GetString(reader.GetOrdinal("link_preview")),
                 UrlNormalized = reader.IsDBNull(reader.GetOrdinal("url_normalized")) ? null : reader.GetString(reader.GetOrdinal("url_normalized")),
+                MediaUniqueId = reader.IsDBNull(reader.GetOrdinal("media_unique_id")) ? null : reader.GetString(reader.GetOrdinal("media_unique_id")),
                 FwdChannelId = reader.IsDBNull(reader.GetOrdinal("fwd_channel_id")) ? null : reader.GetInt64(reader.GetOrdinal("fwd_channel_id")),
                 FwdMessageId = reader.IsDBNull(reader.GetOrdinal("fwd_message_id")) ? null : reader.GetInt32(reader.GetOrdinal("fwd_message_id")),
                 Timestamp = DateTime.Parse(reader.GetString(reader.GetOrdinal("timestamp"))),
@@ -284,5 +300,10 @@ public class MessageStore : IDisposable
         using var cmd = _connection.CreateCommand();
         cmd.CommandText = sql;
         cmd.ExecuteNonQuery();
+    }
+
+    void TryExecute(string sql)
+    {
+        try { Execute(sql); } catch { }
     }
 }

@@ -28,6 +28,7 @@ public class MessageModel
     public string? LinkPreview { get; set; }
 
     [JsonIgnore] public string? UrlNormalized { get; set; }
+    [JsonIgnore] public string? MediaUniqueId { get; set; }
     [JsonIgnore] public long? FwdChannelId { get; set; }
     [JsonIgnore] public int? FwdMessageId { get; set; }
 }
