@@ -66,6 +66,19 @@ public static class UrlHelper
         }
     }
 
+    public static bool IsInviteLink(string url)
+    {
+        try
+        {
+            var uri = new Uri(url);
+            return uri.Host.ToLower().Contains("t.me") && uri.AbsolutePath.StartsWith("/+");
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public static bool IsSkippedDomain(string url)
     {
         try
