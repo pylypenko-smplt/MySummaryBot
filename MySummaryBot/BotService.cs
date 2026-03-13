@@ -298,6 +298,7 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                     await bot.SendMessage(chatId, $"Не знайшов повідомлень від {handle} за останні 24 години.", cancellationToken: cancellationToken);
                     return;
                 }
+                await bot.SendMessage(chatId, "Хмм...", cancellationToken: cancellationToken);
                 var answer = await ai.GetDigest(msgs, parts[1]);
                 await bot.SendMessage(chatId, answer, replyParameters: replyParams, cancellationToken: cancellationToken);
             }
