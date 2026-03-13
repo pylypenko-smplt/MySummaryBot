@@ -14,12 +14,16 @@ public class AiService(HttpClient httpClient)
         "Use Пан/Пані when addressing people. Skip formalities — this is an informal chat among friends.";
 
     const string DefaultSummaryPrompt =
-        "Summarize this group chat. Be concise.\n" +
+        "Summarize this group chat. Use HTML formatting. Be concise.\n" +
         "- Group by topic (not chronologically)\n" +
-        "- **Bold topic name**, then bullet points underneath\n" +
+        "- Each topic header: <b>topic name</b> [msg:ID] — where ID is from the first message of that topic\n" +
+        "- Then bullet points (•) underneath the header\n" +
         "- Skip greetings, reactions, one-word replies\n" +
         "- Note decisions, plans, links shared, and memorable moments\n" +
-        "- If the chat was quiet or boring, say so in one line";
+        "- If the chat was quiet or boring, say so in one line\n" +
+        "- Do NOT add a concluding paragraph or general wrap-up at the end\n" +
+        "- Use only these HTML tags: <b>, <i>, <code>. Do NOT use <a> tags.\n" +
+        "- Message format in input: [HH:mm|ID] name: text — use the ID number for [msg:ID]";
 
     const string DefaultRespectPrompt =
         "Your task: evaluate the вайб (повага) of each chat participant on a 0–10 scale.\n\n" +
@@ -48,12 +52,9 @@ public class AiService(HttpClient httpClient)
         "Skip small talk and reactions.";
 
     const string DefaultDigestPrompt =
-        "Summarize what this user wrote in the chat today.\n" +
-        "- What topics did they bring up?\n" +
-        "- What was their mood and energy?\n" +
-        "- Any notable contributions: jokes, insights, help given?\n" +
-        "- Keep it under 200 words, casual tone\n" +
-        "- Refer to the user by their first name";
+        "Write a short casual note about what this person was up to in the chat today. " +
+        "What did they talk about, who did they interact with, any memorable moments? " +
+        "Keep it under 150 words, no bullet points or headers, refer to them by first name.";
 
     public string SummaryPrompt { get; set; } = DefaultSummaryPrompt;
     public string RespectPrompt { get; set; } = DefaultRespectPrompt;
@@ -225,7 +226,7 @@ public class AiService(HttpClient httpClient)
             var name = m.FirstName ?? m.Username ?? "Unknown";
             var time = m.Timestamp.ToString("HH:mm");
 
-            var line = new StringBuilder($"[{time}] {name}");
+            var line = new StringBuilder($"[{time}|{m.MessageId}] {name}");
 
             if (m.MediaType != null)
                 line.Append($" [{m.MediaType}]");

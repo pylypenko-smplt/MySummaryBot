@@ -54,8 +54,8 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                             {
                                 var msgs = store.GetMessages(digestChatId, TimeSpan.FromHours(24));
                                 if (msgs.Count == 0) continue;
-                                var summary = await ai.GetSummary(msgs);
-                                await botClient.SendMessage(digestChatId, "Дайджест дня:\n\n" + summary, cancellationToken: token);
+                                var summary = ReplaceMsgLinks(await ai.GetSummary(msgs), digestChatId);
+                                await botClient.SendMessage(digestChatId, "Дайджест дня:\n\n" + summary, parseMode: ParseMode.Html, linkPreviewOptions: new Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true }, cancellationToken: token);
                             }
                             catch (Exception ex)
                             {
@@ -211,10 +211,10 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                 await bot.SendMessage(chatId, $"Читаю ваші {msgs.Count} повідомлень, зачекайте трохи...", cancellationToken: cancellationToken);
                 try
                 {
-                    var summary = await ai.GetSummary(msgs,
-                        async msg => await bot.SendMessage(chatId, msg, cancellationToken: cancellationToken));
+                    var summary = ReplaceMsgLinks(await ai.GetSummary(msgs,
+                        async msg => await bot.SendMessage(chatId, msg, cancellationToken: cancellationToken)), chatId);
                     if (summary.Length < 4096)
-                        await bot.SendMessage(chatId, summary, replyParameters: replyParams, cancellationToken: cancellationToken);
+                        await bot.SendMessage(chatId, summary, parseMode: ParseMode.Html, replyParameters: replyParams, linkPreviewOptions: new Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true }, cancellationToken: cancellationToken);
                     else
                     {
                         var parts = summary.Select((x, i) => new { Index = i, Value = x })
@@ -223,7 +223,7 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                             .ToList();
                         foreach (var part in parts)
                         {
-                            await bot.SendMessage(chatId, part, replyParameters: replyParams, cancellationToken: cancellationToken);
+                            await bot.SendMessage(chatId, part, parseMode: ParseMode.Html, replyParameters: replyParams, cancellationToken: cancellationToken);
                             await Task.Delay(50, cancellationToken);
                         }
                     }
@@ -252,8 +252,8 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                 try
                 {
                     var prefix = totalCount > 2000 ? $"(показано останні 2000 з {totalCount} повідомлень)\n\n" : "";
-                    var summary = hours == 1 ? await ai.GetSummaryHour(msgs) : await ai.GetSummary(msgs);
-                    await bot.SendMessage(chatId, prefix + summary, cancellationToken: cancellationToken);
+                    var summary = ReplaceMsgLinks(hours == 1 ? await ai.GetSummaryHour(msgs) : await ai.GetSummary(msgs), chatId);
+                    await bot.SendMessage(chatId, prefix + summary, parseMode: ParseMode.Html, linkPreviewOptions: new Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true }, cancellationToken: cancellationToken);
                 }
                 catch (Exception)
                 {
@@ -683,6 +683,14 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
         }
 
         return string.Join("\n", result).Trim();
+    }
+
+    static string ReplaceMsgLinks(string text, long chatId)
+    {
+        var chatIdStr = chatId.ToString();
+        var positiveId = chatIdStr.StartsWith("-100") ? chatIdStr[4..] : System.Math.Abs(chatId).ToString();
+        return System.Text.RegularExpressions.Regex.Replace(
+            text, @"\[msg:(\d+)\]", m => $"<a href=\"https://t.me/c/{positiveId}/{m.Groups[1].Value}\">→</a>");
     }
 
     static string GetRandomEmoji()
