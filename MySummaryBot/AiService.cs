@@ -49,7 +49,9 @@ public class AiService(HttpClient httpClient)
     const string ChunkSummaryPrompt =
         "Extract key points from this chat segment. Max 8 bullets.\n" +
         "Focus on: topics discussed, decisions made, links/resources shared.\n" +
-        "Skip small talk and reactions.";
+        "Skip small talk and reactions.\n" +
+        "Message format in input: [HH:mm|ID] name: text\n" +
+        "For each bullet, append [msg:ID] using the ID of the first relevant message.";
 
     const string DefaultDigestPrompt =
         "Write a short casual note about what this person was up to in the chat today. " +
@@ -199,9 +201,8 @@ public class AiService(HttpClient httpClient)
 
         var mergeInstruction =
             SummaryPrompt +
-            "\n\nYou are given partial summaries from different time periods. " +
-            "Combine them into a single compact summary. " +
-            "First list the main topics, then briefly note key events in chronological order. " +
+            "\n\nYou are given partial summaries from different time periods. Each bullet may contain [msg:ID] tags — preserve them exactly as-is. " +
+            "Combine into a single compact summary grouped by topic. " +
             "Keep the total response under 2000 characters.";
 
         var requestBody = new
