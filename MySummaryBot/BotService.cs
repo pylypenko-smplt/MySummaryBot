@@ -143,10 +143,10 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
 
             message.MediaType = mediaType;
             var rawUrl = UrlHelper.ExtractFirstUrl(update.Message);
-            message.UrlNormalized = (rawUrl != null && !UrlHelper.IsInviteLink(rawUrl)) ? UrlHelper.Normalize(rawUrl) : null;
+            message.UrlNormalized = (rawUrl != null && !UrlHelper.IsInviteLink(rawUrl) && !UrlHelper.IsSkippedDomain(rawUrl)) ? UrlHelper.Normalize(rawUrl) : null;
             message.MediaUniqueId = update.Message.Photo?.Last().FileUniqueId
                 ?? update.Message.Video?.FileUniqueId
-                ?? update.Message.Document?.FileUniqueId;
+                ?? (update.Message.Animation == null ? update.Message.Document?.FileUniqueId : null);
             if (update.Message.ForwardOrigin is MessageOriginChannel originChannel)
             {
                 message.FwdChannelId = originChannel.Chat.Id;
