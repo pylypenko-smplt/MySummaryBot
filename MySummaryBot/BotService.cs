@@ -64,6 +64,30 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                             }
                         }
                     }
+
+                    if (utcNow.Hour == 12 && utcNow.Minute == 0)
+                    {
+                        var today = utcNow.Date.ToString("yyyy-MM-dd");
+                        var activeChats = store.GetActiveChats(utcNow.AddHours(-24));
+                        var chatsToSend = activeChats.Where(c => !store.HasHoroscopeBeenSent(c, today)).ToList();
+                        if (chatsToSend.Count > 0)
+                        {
+                            var horoscope = await ai.GetHoroscope();
+                            foreach (var chatId in chatsToSend)
+                            {
+                                try
+                                {
+                                    await botClient.SendMessage(chatId, "🔮 <b>Автогороскоп дня</b>\n\n" + horoscope, parseMode: Telegram.Bot.Types.Enums.ParseMode.Html, linkPreviewOptions: new Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true }, cancellationToken: token);
+                                    store.MarkHoroscopeSent(chatId, today);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine($"[Horoscope Error] chatId={chatId}: {ex.Message}");
+                                    await SendAdmin($"[Horoscope Error] chatId={chatId}: {ex.Message}", token);
+                                }
+                            }
+                        }
+                    }
                 }
                 catch (Exception e)
                 {

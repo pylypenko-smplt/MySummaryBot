@@ -58,6 +58,22 @@ public class AiService(HttpClient httpClient)
         "What did they talk about, who did they interact with, any memorable moments? " +
         "Keep it under 150 words, no bullet points or headers, refer to them by first name.";
 
+    const string HoroscopePrompt =
+        "Ти — автомобільний астролог ревьорб-чату. Напиши гороскоп на сьогодні для всіх 12 знаків зодіаку.\n\n" +
+        "Правила:\n" +
+        "- Пиши українською, тон — як у друга який шарить за тачки і трохи за езотерику\n" +
+        "- Кожен знак — 2-3 речення, коротко і по ділу\n" +
+        "- Використовуй автомобільну лексику: підвіска, турбіна, boost, валити боком, розвал, сходження, діагностика, масложор, колодки, stage 2, даунпайп, чіп, вейстгейт, ковші, гребінка, стенс, фітмент, ресто, клін-лук, ойл кулер, інтеркулер, blow-off, тощо\n" +
+        "- Автомобільні метафори замість банальних: 'зірки шепочуть' -> 'ECU каже', 'удача чекає' -> 'boost прийде'\n" +
+        "- НЕ бійся поганих передбачень — нехай деяким знакам день не задасться (поломка, штраф, некайф). Мінімум 3 знаки мають отримати щось не дуже\n" +
+        "- Не будь generic — кожен гороскоп має відчуватись як написаний саме для цієї тусовки ентузіастів, а не для журналу 'За рулём'\n" +
+        "- НЕ повторюй одні й ті самі предмети/теми для різних знаків\n" +
+        "- Використовуй emoji знаків зодіаку\n" +
+        "- Формат: кожен знак з нового рядка, <b>назва знаку emoji</b> — текст\n" +
+        "- Використовуй HTML теги: <b>, <i>. НЕ використовуй <a>\n" +
+        "- На початку — одне речення-інтро (загальний вайб дня для авто-тусовки)\n" +
+        "- В кінці — НЕ додавай загальних висновків чи побажань";
+
     public string SummaryPrompt { get; set; } = DefaultSummaryPrompt;
     public string RespectPrompt { get; set; } = DefaultRespectPrompt;
     public string AnswerPrompt { get; set; } = DefaultAnswerPrompt;
@@ -175,6 +191,22 @@ public class AiService(HttpClient httpClient)
                 new { role = "user", content = $"User: {displayName}\nMessages:\n{FormatMessages(msgs)}" }
             },
             max_completion_tokens = 8192
+        };
+        return await MakeApiRequest(requestBody);
+    }
+
+    public async Task<string> GetHoroscope()
+    {
+        var today = DateTime.UtcNow.ToString("yyyy-MM-dd, dddd");
+        var requestBody = new
+        {
+            model = DefaultModel,
+            messages = new[]
+            {
+                new { role = "system", content = SystemPrompt + "\n\n" + HoroscopePrompt },
+                new { role = "user", content = $"Дата: {today}. Згенеруй автомобільний гороскоп на сьогодні." }
+            },
+            max_completion_tokens = 4096
         };
         return await MakeApiRequest(requestBody);
     }

@@ -46,6 +46,14 @@ public class MessageStore : IDisposable
                 PRIMARY KEY (chat_id, date)
             )
             """);
+
+        Execute("""
+            CREATE TABLE IF NOT EXISTS horoscope_log (
+                chat_id INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                PRIMARY KEY (chat_id, date)
+            )
+            """);
     }
 
     public void Dispose()
@@ -261,6 +269,30 @@ public class MessageStore : IDisposable
         {
             using var cmd = _connection.CreateCommand();
             cmd.CommandText = "INSERT OR IGNORE INTO digest_log (chat_id, date) VALUES (@c, @d)";
+            cmd.Parameters.AddWithValue("@c", chatId);
+            cmd.Parameters.AddWithValue("@d", date);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    public bool HasHoroscopeBeenSent(long chatId, string date)
+    {
+        lock (_lock)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM horoscope_log WHERE chat_id = @c AND date = @d";
+            cmd.Parameters.AddWithValue("@c", chatId);
+            cmd.Parameters.AddWithValue("@d", date);
+            return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+        }
+    }
+
+    public void MarkHoroscopeSent(long chatId, string date)
+    {
+        lock (_lock)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "INSERT OR IGNORE INTO horoscope_log (chat_id, date) VALUES (@c, @d)";
             cmd.Parameters.AddWithValue("@c", chatId);
             cmd.Parameters.AddWithValue("@d", date);
             cmd.ExecuteNonQuery();
