@@ -448,7 +448,8 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                         "/prompt_answer [prompt] - змінити промпт для відповіді на питання\n" +
                         "/prompt_answer_reset - скинути промпт для відповіді на питання\n" +
                         "/model [model] - змінити модель для генерації тексту\n" +
-                        "/model_reset - скинути модель для генерації тексту";
+                        "/model_reset - скинути модель для генерації тексту\n" +
+                        "/horoscope - згенерувати гороскоп (превью в адмінку)";
 
                 await bot.SendMessage(chatId, helpMessage);
             }
@@ -518,6 +519,18 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                     }
                     ai.Model = value;
                     await bot.SendMessage(chatId, "Model updated");
+                }
+                else if (messageText == "/horoscope")
+                {
+                    try
+                    {
+                        var horoscope = await ai.GetHoroscope();
+                        await bot.SendMessage(chatId, "🔮 <b>Автогороскоп дня</b>\n\n" + horoscope, parseMode: Telegram.Bot.Types.Enums.ParseMode.Html, linkPreviewOptions: new Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true });
+                    }
+                    catch (Exception ex)
+                    {
+                        await bot.SendMessage(chatId, $"Помилка генерації гороскопу: {ex.Message}");
+                    }
                 }
                 else if (messageText == "/chats")
                 {
