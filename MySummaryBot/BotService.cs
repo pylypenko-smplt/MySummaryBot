@@ -65,7 +65,7 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                         }
                     }
 
-                    if (utcNow.Hour >= 12)
+                    if (utcNow.Hour >= 8)
                     {
                         var today = utcNow.Date.ToString("yyyy-MM-dd");
                         var activeChats = store.GetActiveChats(utcNow.AddHours(-24));
