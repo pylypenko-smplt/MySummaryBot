@@ -245,7 +245,7 @@ public class AiService(HttpClient httpClient)
                 new { role = "system", content = SystemPrompt + "\n\n" + HoroscopePrompt },
                 new { role = "user", content = $"Дата: {today}. Згенеруй автомобільний гороскоп на сьогодні." }
             },
-            max_completion_tokens = 4096
+            max_completion_tokens = 16384
         };
         return await MakeApiRequest(requestBody);
     }
