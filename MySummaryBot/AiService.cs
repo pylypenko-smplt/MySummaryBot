@@ -8,6 +8,12 @@ public class AiService(HttpClient httpClient)
     const string AnalysisModel = "gpt-5-mini";
     const string SmartModel = "gpt-5.2";
 
+    // Курс USD→UAH для оцінки вартості запиту. Береться з env USD_UAH_RATE, інакше дефолт.
+    static readonly decimal UsdUah =
+        decimal.TryParse(Environment.GetEnvironmentVariable("USD_UAH_RATE"),
+            System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var r) && r > 0
+            ? r : 41.5m;
+
     const string SystemPrompt =
         "You are a witty Ukrainian-speaking assistant for the revverb friend group chat. " +
         "Be casual, sharp, and concise. Always respond in Ukrainian. " +
@@ -245,13 +251,35 @@ public class AiService(HttpClient httpClient)
 
     async Task<string> MakeApiRequest(object request, bool appendCost = true)
     {
-        var response = await httpClient.PostAsync(
-            "https://api.openai.com/v1/chat/completions",
-            new StringContent(JsonSerializer.Serialize(request), Encoding.UTF8, "application/json")
-        );
-
-        if (!response.IsSuccessStatusCode)
+        var json = JsonSerializer.Serialize(request);
+        const int maxAttempts = 3;
+        HttpResponseMessage response;
+        for (var attempt = 1; ; attempt++)
         {
+            try
+            {
+                response = await httpClient.PostAsync(
+                    "https://api.openai.com/v1/chat/completions",
+                    new StringContent(json, Encoding.UTF8, "application/json"));
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && attempt < maxAttempts)
+            {
+                await Task.Delay(1000 * (int)Math.Pow(2, attempt - 1)); // 1s, 2s
+                continue;
+            }
+
+            if (response.IsSuccessStatusCode)
+                break;
+
+            // Транзиентні коди (429 / 5xx) — ретраїмо з backoff; решта — одразу кидаємо.
+            var status = (int)response.StatusCode;
+            if ((status == 429 || status >= 500) && attempt < maxAttempts)
+            {
+                response.Dispose();
+                await Task.Delay(1000 * (int)Math.Pow(2, attempt - 1));
+                continue;
+            }
+
             var errorContent = await response.Content.ReadAsStringAsync();
             throw new HttpRequestException($"Error API: {response.StatusCode}, Details: {errorContent}");
         }
@@ -278,7 +306,7 @@ public class AiService(HttpClient httpClient)
 
             var promptTokens = completion?.Usage?.PromptTokens ?? 0;
             var completionTokens = completion?.Usage?.CompletionTokens ?? 0;
-            var costUah = (promptTokens * inputPrice + completionTokens * outputPrice) * 44.50m;
+            var costUah = (promptTokens * inputPrice + completionTokens * outputPrice) * UsdUah;
             resp += $"\n\n*Витрачено: {costUah:F2} грн*";
         }
 

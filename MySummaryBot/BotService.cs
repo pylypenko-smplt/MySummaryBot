@@ -81,7 +81,7 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                                 var msgs = store.GetMessages(digestChatId, TimeSpan.FromHours(24));
                                 if (msgs.Count == 0) continue;
                                 var summary = ReplaceMsgLinks(await ai.GetSummary(msgs), digestChatId);
-                                await botClient.SendMessage(digestChatId, "Дайджест дня:\n\n" + summary, parseMode: ParseMode.Html, linkPreviewOptions: new Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true }, cancellationToken: token);
+                                await SendLongHtml(digestChatId, "Дайджест дня:\n\n" + summary, token);
                             }
                             catch (Exception ex)
                             {
@@ -99,9 +99,10 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                         var activeChats = store.GetActiveChats(utcNow.AddHours(-24));
                         foreach (var voteChatId in activeChats.Where(c => !store.HasVotePollForWeek(c, week)))
                         {
-                            store.SaveVotePoll(voteChatId, week, 0);
                             try
                             {
+                                // Зберігаємо тільки після успішної відправки (message_id > 0) —
+                                // якщо відправка впала, наступний тік середи повторить.
                                 var poll = await botClient.SendPoll(voteChatId, VoteQuestion, BuildVoteOptions(), false, allowsMultipleAnswers: true, cancellationToken: token);
                                 store.SaveVotePoll(voteChatId, week, poll.MessageId);
                                 await botClient.PinChatMessage(voteChatId, poll.MessageId, cancellationToken: token);
@@ -162,6 +163,23 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                 Console.WriteLine($"[Loop Error] {e.Message}");
                 await SendAdmin($"[Loop Error] {e.Message}", token);
             }
+    }
+
+    // Надсилає HTML-повідомлення, розбиваючи на частини при перевищенні ліміту Telegram (4096).
+    async Task SendLongHtml(long chatId, string text, CancellationToken token)
+    {
+        var linkOpts = new Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true };
+        if (text.Length <= 4096)
+        {
+            await botClient.SendMessage(chatId, text, parseMode: ParseMode.Html, linkPreviewOptions: linkOpts, cancellationToken: token);
+            return;
+        }
+        for (var i = 0; i < text.Length; i += 4000)
+        {
+            var part = text.Substring(i, Math.Min(4000, text.Length - i));
+            await botClient.SendMessage(chatId, part, parseMode: ParseMode.Html, linkPreviewOptions: linkOpts, cancellationToken: token);
+            await Task.Delay(50, token);
+        }
     }
 
     public async Task SendAdmin(string msg, CancellationToken ct = default)
@@ -697,7 +715,7 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
         catch (Exception ex)
         {
             Console.WriteLine($"Помилка перевірки адміна: {ex.Message}");
-            return true;
+            return false; // fail-closed: не вдалося перевірити права — забороняємо
         }
 
         return false;

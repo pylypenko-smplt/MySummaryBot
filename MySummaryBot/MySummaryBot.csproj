@@ -11,6 +11,8 @@
     <ItemGroup>
       <PackageReference Include="Telegram.Bot" Version="22.1.3" />
       <PackageReference Include="Microsoft.Data.Sqlite" Version="9.*" />
+      <!-- Явно піднімаємо нативний SQLite до 3.0.x: фікс GHSA-2m69-gcr7-jv3q (NU1903), MS-пакет ще на 2.1.x -->
+      <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
     </ItemGroup>
 
 </Project>

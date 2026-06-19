@@ -289,7 +289,7 @@ public class MessageStore : IDisposable
         lock (_lock)
         {
             using var cmd = _connection.CreateCommand();
-            cmd.CommandText = "SELECT COUNT(*) FROM vote_poll WHERE chat_id = @c AND week = @w";
+            cmd.CommandText = "SELECT COUNT(*) FROM vote_poll WHERE chat_id = @c AND week = @w AND message_id > 0";
             cmd.Parameters.AddWithValue("@c", chatId);
             cmd.Parameters.AddWithValue("@w", week);
             return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
