@@ -54,6 +54,23 @@ public class MessageStore : IDisposable
                 PRIMARY KEY (chat_id, date)
             )
             """);
+
+        Execute("""
+            CREATE TABLE IF NOT EXISTS vote_poll (
+                chat_id INTEGER NOT NULL,
+                week TEXT NOT NULL,
+                message_id INTEGER NOT NULL,
+                posted_at TEXT NOT NULL,
+                closed INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (chat_id, week)
+            )
+            """);
+        Execute("""
+            CREATE TABLE IF NOT EXISTS meetup_history (
+                place TEXT NOT NULL,
+                used_date TEXT NOT NULL
+            )
+            """);
     }
 
     public void Dispose()
@@ -299,6 +316,63 @@ public class MessageStore : IDisposable
         }
     }
 
+    public bool HasVotePollForWeek(long chatId, string week)
+    {
+        lock (_lock)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM vote_poll WHERE chat_id = @c AND week = @w";
+            cmd.Parameters.AddWithValue("@c", chatId);
+            cmd.Parameters.AddWithValue("@w", week);
+            return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+        }
+    }
+
+    public void SaveVotePoll(long chatId, string week, int messageId)
+    {
+        lock (_lock)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO vote_poll (chat_id, week, message_id, posted_at, closed)
+                VALUES (@c, @w, @mid, @pa, 0)
+                ON CONFLICT(chat_id, week) DO UPDATE SET message_id = @mid
+                """;
+            cmd.Parameters.AddWithValue("@c", chatId);
+            cmd.Parameters.AddWithValue("@w", week);
+            cmd.Parameters.AddWithValue("@mid", messageId);
+            cmd.Parameters.AddWithValue("@pa", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"));
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    public List<(long ChatId, int MessageId)> GetOpenVotePolls(string week)
+    {
+        lock (_lock)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "SELECT chat_id, message_id FROM vote_poll WHERE week = @w AND closed = 0";
+            cmd.Parameters.AddWithValue("@w", week);
+            var result = new List<(long, int)>();
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+                result.Add((reader.GetInt64(0), reader.GetInt32(1)));
+            return result;
+        }
+    }
+
+    public void MarkVotePollClosed(long chatId, string week)
+    {
+        lock (_lock)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "UPDATE vote_poll SET closed = 1 WHERE chat_id = @c AND week = @w";
+            cmd.Parameters.AddWithValue("@c", chatId);
+            cmd.Parameters.AddWithValue("@w", week);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
     List<MessageModel> ReadMessages(SqliteCommand cmd)
     {
         var result = new List<MessageModel>();
@@ -325,6 +399,32 @@ public class MessageStore : IDisposable
             });
         }
         return result;
+    }
+
+    public Dictionary<string, string> GetPlaceLastUsed()
+    {
+        lock (_lock)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "SELECT place, MAX(used_date) FROM meetup_history GROUP BY place";
+            var result = new Dictionary<string, string>();
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+                result[reader.GetString(0)] = reader.IsDBNull(1) ? "" : reader.GetString(1);
+            return result;
+        }
+    }
+
+    public void RecordMeetupPlace(string place, string date)
+    {
+        lock (_lock)
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "INSERT INTO meetup_history (place, used_date) VALUES (@p, @d)";
+            cmd.Parameters.AddWithValue("@p", place);
+            cmd.Parameters.AddWithValue("@d", date);
+            cmd.ExecuteNonQuery();
+        }
     }
 
     void Execute(string sql)

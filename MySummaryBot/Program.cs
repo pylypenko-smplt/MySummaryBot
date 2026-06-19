@@ -33,6 +33,9 @@ braveHttpClient.DefaultRequestHeaders.Add("X-Subscription-Token", braveSearchKey
 braveHttpClient.DefaultRequestHeaders.Add("Accept", "application/json");
 var imageSearch = new ImageSearchService(braveHttpClient);
 
+var weatherHttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+var weather = new WeatherService(weatherHttpClient);
+
 var dbPath = Path.Combine(Environment.GetEnvironmentVariable("DATA_DIR") ?? "/data", "mysummarybot.db");
 using var store = new MessageStore(dbPath);
 
@@ -41,7 +44,7 @@ var ai = new AiService(httpClient);
 try
 {
     var botClient = new TelegramBotClient(token);
-    var bot = new BotService(botClient, ai, store, adminChatId, ogHttpClient, imageSearch);
+    var bot = new BotService(botClient, ai, store, adminChatId, ogHttpClient, imageSearch, weather);
     var cts = new CancellationTokenSource();
 
     Console.CancelKeyPress += (_, e) =>
