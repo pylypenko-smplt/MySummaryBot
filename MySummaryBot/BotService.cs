@@ -301,336 +301,364 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                 return;
 
             if (messageText.StartsWith("/підсумок_день") || messageText.StartsWith("/summary_day"))
-            {
-                var msgs = store.GetMessages(chatId, TimeSpan.FromDays(1));
-                if (msgs.Count == 0)
-                {
-                    await bot.SendMessage(chatId, "Немає повідомлень за останню добу.", replyParameters: replyParams, cancellationToken: cancellationToken);
-                    return;
-                }
-                await bot.SendMessage(chatId, $"Читаю ваші {msgs.Count} повідомлень, зачекайте трохи...", cancellationToken: cancellationToken);
-                try
-                {
-                    var summary = ReplaceMsgLinks(await ai.GetSummary(msgs,
-                        async msg => await bot.SendMessage(chatId, msg, cancellationToken: cancellationToken)), chatId);
-                    if (summary.Length < 4096)
-                        await bot.SendMessage(chatId, summary, parseMode: ParseMode.Html, replyParameters: replyParams, linkPreviewOptions: new Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true }, cancellationToken: cancellationToken);
-                    else
-                    {
-                        var parts = summary.Select((x, i) => new { Index = i, Value = x })
-                            .GroupBy(x => x.Index / 4000)
-                            .Select(g => string.Join("", g.Select(x => x.Value)))
-                            .ToList();
-                        foreach (var part in parts)
-                        {
-                            await bot.SendMessage(chatId, part, parseMode: ParseMode.Html, replyParameters: replyParams, cancellationToken: cancellationToken);
-                            await Task.Delay(50, cancellationToken);
-                        }
-                    }
-                }
-                catch (Exception)
-                {
-                    await bot.SendMessage(chatId, "Не вдалося згенерувати підсумок, спробуйте ще раз трохи пізніше", cancellationToken: cancellationToken);
-                    throw;
-                }
-            }
+                await HandleSummaryDay(bot, chatId, replyParams, cancellationToken);
             else if (messageText.StartsWith("/підсумок") || messageText.StartsWith("/summary"))
-            {
-                var parts = messageText.Split(' ');
-                var hours = 1;
-                if (parts.Length > 1 && int.TryParse(parts[1], out var n))
-                    hours = Math.Clamp(n, 1, 720);
-                var msgs = store.GetMessages(chatId, TimeSpan.FromHours(hours));
-                if (msgs.Count == 0)
-                {
-                    await bot.SendMessage(chatId, "Немає повідомлень за вказаний період.", replyParameters: replyParams, cancellationToken: cancellationToken);
-                    return;
-                }
-                var totalCount = msgs.Count;
-                if (msgs.Count > 2000) msgs = msgs.TakeLast(2000).ToList();
-                await bot.SendMessage(chatId, $"Читаю ваші {totalCount} повідомлень, зачекайте трохи...", cancellationToken: cancellationToken);
-                try
-                {
-                    var prefix = totalCount > 2000 ? $"(показано останні 2000 з {totalCount} повідомлень)\n\n" : "";
-                    var summary = ReplaceMsgLinks(hours == 1 ? await ai.GetSummaryHour(msgs) : await ai.GetSummary(msgs), chatId);
-                    await bot.SendMessage(chatId, prefix + summary, parseMode: ParseMode.Html, linkPreviewOptions: new Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true }, cancellationToken: cancellationToken);
-                }
-                catch (Exception)
-                {
-                    await bot.SendMessage(chatId, "Не вдалося згенерувати підсумок, спробуйте ще раз трохи пізніше", cancellationToken: cancellationToken);
-                    throw;
-                }
-            }
+                await HandleSummary(bot, chatId, messageText, replyParams, cancellationToken);
             else if (messageText.StartsWith("/stats") || messageText.StartsWith("/статистика"))
-            {
-                var stats = store.GetStats(chatId, TimeSpan.FromHours(24));
-                if (stats.Count == 0)
-                {
-                    await bot.SendMessage(chatId, "Немає повідомлень за останні 24 години.", cancellationToken: cancellationToken);
-                    return;
-                }
-                var lines = stats.Select((s, i) =>
-                {
-                    var name = s.FirstName ?? s.Username ?? "Unknown";
-                    var handle = s.Username != null ? $" ({s.Username})" : "";
-                    return $"{i + 1}. {name}{handle} — {s.Count} повідомлень";
-                });
-                await bot.SendMessage(chatId, "Активність за 24 години:\n\n" + string.Join("\n", lines), cancellationToken: cancellationToken);
-            }
+                await HandleStats(bot, chatId, cancellationToken);
             else if (messageText.StartsWith("/digest") || messageText.StartsWith("/дайджест"))
-            {
-                var parts = messageText.Split(' ');
-                if (parts.Length < 2 || !parts[1].StartsWith("@"))
-                {
-                    await bot.SendMessage(chatId, "Вкажіть юзернейм: /digest @username", cancellationToken: cancellationToken);
-                    return;
-                }
-                var handle = parts[1].TrimStart('@');
-                var foundUserId = store.FindUserId(chatId, handle);
-                if (foundUserId == null)
-                {
-                    await bot.SendMessage(chatId, $"Не знайшов {handle} в чаті за останні 24 години.", cancellationToken: cancellationToken);
-                    return;
-                }
-                var msgs = store.GetUserMessages(chatId, foundUserId.Value, TimeSpan.FromHours(24));
-                if (msgs.Count == 0)
-                {
-                    await bot.SendMessage(chatId, $"Не знайшов повідомлень від {handle} за останні 24 години.", cancellationToken: cancellationToken);
-                    return;
-                }
-                await bot.SendMessage(chatId, "Хмм...", cancellationToken: cancellationToken);
-                var answer = await ai.GetDigest(msgs, parts[1]);
-                await bot.SendMessage(chatId, answer, replyParameters: replyParams, cancellationToken: cancellationToken);
-            }
+                await HandleDigest(bot, chatId, messageText, replyParams, cancellationToken);
             else if (messageText.StartsWith("/питання") || messageText.StartsWith("/question") || messageText.StartsWith("@revverb_bot"))
-            {
-                message.Text = message.Text!.Replace("/питання", "").Replace("/question", "").Trim();
-                message.Text = message.Text.Replace("@revverb_bot", "").Trim();
-
-                if (string.IsNullOrWhiteSpace(message.Text) && update.Message.ReplyToMessage == null)
-                {
-                    await bot.SendMessage(chatId, "Напишіть питання після команди, наприклад:\n/питання Що таке Docker?", replyParameters: replyParams);
-                    return;
-                }
-
-                await bot.SendMessage(chatId, "Хмм...");
-
-                MessageModel? replyMessage = null;
-                if (update.Message.ReplyToMessage != null)
-                    replyMessage = store.FindMessage(chatId, update.Message.ReplyToMessage.Id);
-
-                try
-                {
-                    var answer = await ai.GetAnswer(message, replyMessage);
-                    await bot.SendMessage(chatId, answer, replyParameters: replyParams);
-                }
-                catch (Exception)
-                {
-                    await bot.SendMessage(chatId, "Не вдалося згенерувати відповідь, спробуйте ще раз трохи пізніше");
-                    throw;
-                }
-            }
+                await HandleQuestion(bot, update, message, chatId, replyParams);
             else if (messageText.StartsWith("/повага") || messageText.StartsWith("/respect"))
-            {
-                var msgs = store.GetMessages(chatId, TimeSpan.FromHours(3));
-                if (msgs.Count == 0)
-                {
-                    await bot.SendMessage(chatId, "Немає повідомлень за останні 3 години.", replyParameters: replyParams);
-                    return;
-                }
-                await bot.SendMessage(chatId, "Вимірюю рівень поваги, зачекайте трохи...");
-                try
-                {
-                    var respect = await ai.GetRespectLevel(msgs);
-                    await bot.SendMessage(chatId, respect, replyParameters: replyParams);
-                }
-                catch (Exception)
-                {
-                    await bot.SendMessage(chatId, "Рівень поваги не виміряно, спробуйте ще раз трохи пізніше");
-                    throw;
-                }
-            }
+                await HandleRespect(bot, chatId, replyParams);
             else if (messageText.StartsWith("/голосування") || messageText.StartsWith("/vote"))
-            {
-                if (!await IsUserAdminOrOwnerAsync(bot, chatId, update.Message.From!.Id))
-                {
-                    await bot.SendMessage(chatId, "Тільки адміни можуть створювати голосування 🙅‍♂️");
-                    return;
-                }
-
-                var options = BuildVoteOptions();
-
-                await bot.SendPoll(chatId, VoteQuestion, options, false, allowsMultipleAnswers: true);
-            }
+                await HandleVote(bot, update, chatId);
             else if (messageText.StartsWith("/readme"))
-            {
-                try
-                {
-                    var readmeUrl = "https://raw.githubusercontent.com/pylypenko-smplt/MySummaryBot/HEAD/README.md";
-                    var response = await ogHttpClient.GetAsync(readmeUrl, cancellationToken);
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        await bot.SendMessage(chatId, "README не знайдено", replyParameters: replyParams, cancellationToken: cancellationToken);
-                        return;
-                    }
-
-                    var content = await response.Content.ReadAsStringAsync(cancellationToken);
-                    content = FormatReadme(content);
-
-                    if (content.Length <= 4096)
-                    {
-                        await bot.SendMessage(chatId, content, parseMode: Telegram.Bot.Types.Enums.ParseMode.Html, replyParameters: replyParams, cancellationToken: cancellationToken);
-                    }
-                    else
-                    {
-                        var truncated = content[..3900];
-                        var lastNl = truncated.LastIndexOf('\n');
-                        if (lastNl > 3000) truncated = truncated[..lastNl];
-                        await bot.SendMessage(chatId, truncated, parseMode: Telegram.Bot.Types.Enums.ParseMode.Html, replyParameters: replyParams, cancellationToken: cancellationToken);
-                    }
-                }
-                catch (Exception)
-                {
-                    await bot.SendMessage(chatId, "Не вдалося завантажити README", replyParameters: replyParams, cancellationToken: cancellationToken);
-                    throw;
-                }
-            }
+                await HandleReadme(bot, chatId, replyParams, cancellationToken);
             else if (messageText.StartsWith("/допомога") || messageText.StartsWith("/help"))
-            {
-                var helpMessage =
-                    "/summary (/підсумок) [N] - підсумок за N годин (за замовч. 1г)\n" +
-                    "/summary_day (/підсумок_день) - підсумок за останні 24 години\n" +
-                    "/stats (/статистика) - активність учасників за 24 години\n" +
-                    "/digest @username (/дайджест) - що написав учасник за 24 години\n" +
-                    "/question (/питання) [питання] - відповідь на питання\n" +
-                    "  також можна тегнути @revverb_bot з питанням\n" +
-                    "/respect (/повага) - виміряти рівень поваги\n" +
-                    "/vote (/голосування) - голосування за зустріч (для адмінів)\n" +
-                    "/readme - README чату\n" +
-                    "/help (/допомога) - показати цей список команд";
-
-                if (chatId.ToString() == adminChatId)
-                    helpMessage +=
-                        "\n/chats - список активних чатів за 24 години\n" +
-                        "/prompt_summary [prompt] - змінити промпт для підсумки\n" +
-                        "/prompt_summary_reset - скинути промпт для підсумки\n" +
-                        "/prompt_respect [prompt] - змінити промпт для вимірювання поваги\n" +
-                        "/prompt_respect_reset - скинути промпт для вимірювання поваги\n" +
-                        "/prompt_answer [prompt] - змінити промпт для відповіді на питання\n" +
-                        "/prompt_answer_reset - скинути промпт для відповіді на питання\n" +
-                        "/model [model] - змінити модель для генерації тексту\n" +
-                        "/model_reset - скинути модель для генерації тексту";
-
-                await bot.SendMessage(chatId, helpMessage);
-            }
+                await HandleHelp(bot, chatId);
             else if (chatId.ToString() == adminChatId)
-            {
-                // _reset variants must be checked before their prefix counterparts
-                if (messageText.StartsWith("/prompt_summary_reset"))
-                {
-                    ai.ResetSummaryPrompt();
-                    await bot.SendMessage(chatId, "Prompt reset");
-                }
-                else if (messageText.StartsWith("/prompt_summary"))
-                {
-                    var value = messageText.Replace("/prompt_summary", "").Trim();
-                    if (string.IsNullOrWhiteSpace(value))
-                    {
-                        await bot.SendMessage(chatId, "Вкажіть промпт після команди, наприклад:\n/prompt_summary Summarize briefly.");
-                        return;
-                    }
-                    ai.SummaryPrompt = value;
-                    await bot.SendMessage(chatId, "Prompt updated");
-                }
-                else if (messageText.StartsWith("/prompt_respect_reset"))
-                {
-                    ai.ResetRespectPrompt();
-                    await bot.SendMessage(chatId, "Prompt reset");
-                }
-                else if (messageText.StartsWith("/prompt_respect"))
-                {
-                    var value = messageText.Replace("/prompt_respect", "").Trim();
-                    if (string.IsNullOrWhiteSpace(value))
-                    {
-                        await bot.SendMessage(chatId, "Вкажіть промпт після команди, наприклад:\n/prompt_respect Evaluate respect level.");
-                        return;
-                    }
-                    ai.RespectPrompt = value;
-                    await bot.SendMessage(chatId, "Prompt updated");
-                }
-                else if (messageText.StartsWith("/prompt_answer_reset"))
-                {
-                    ai.ResetAnswerPrompt();
-                    await bot.SendMessage(chatId, "Prompt reset");
-                }
-                else if (messageText.StartsWith("/prompt_answer"))
-                {
-                    var value = messageText.Replace("/prompt_answer", "").Trim();
-                    if (string.IsNullOrWhiteSpace(value))
-                    {
-                        await bot.SendMessage(chatId, "Вкажіть промпт після команди, наприклад:\n/prompt_answer Answer concisely.");
-                        return;
-                    }
-                    ai.AnswerPrompt = value;
-                    await bot.SendMessage(chatId, "Prompt updated");
-                }
-                else if (messageText.StartsWith("/model_reset"))
-                {
-                    ai.ResetModel();
-                    await bot.SendMessage(chatId, "Model reset");
-                }
-                else if (messageText.StartsWith("/model"))
-                {
-                    var value = messageText.Replace("/model", "").Trim();
-                    if (string.IsNullOrWhiteSpace(value))
-                    {
-                        await bot.SendMessage(chatId, "Вкажіть модель після команди, наприклад:\n/model gpt-5-mini");
-                        return;
-                    }
-                    ai.Model = value;
-                    await bot.SendMessage(chatId, "Model updated");
-                }
-                else if (messageText == "/chats")
-                {
-                    var chats = store.GetActiveChats(DateTime.UtcNow.AddHours(-24));
-                    if (chats.Count == 0)
-                    {
-                        await bot.SendMessage(chatId, "Активних чатів немає");
-                    }
-                    else
-                    {
-                        var lines = new List<string> { "Активні чати за 24г:" };
-                        foreach (var cid in chats)
-                        {
-                            try
-                            {
-                                var info = await bot.GetChat(cid, cancellationToken);
-                                var count = await bot.GetChatMemberCount(cid, cancellationToken);
-                                var name = info.Title ?? info.Username ?? info.FirstName ?? cid.ToString();
-                                lines.Add($"{name} ({count} уч.) — {cid}");
-                            }
-                            catch
-                            {
-                                lines.Add(cid.ToString());
-                            }
-                        }
-                        await bot.SendMessage(chatId, string.Join("\n", lines));
-                    }
-                }
-                else if (messageText.StartsWith("/"))
-                {
-                    await bot.SendMessage(chatId, "Невідома команда. Напишіть /допомога щоб побачити список доступних команд.", replyParameters: replyParams);
-                }
-            }
+                await HandleAdminCommand(bot, chatId, messageText, replyParams, cancellationToken);
             else if (messageText.StartsWith("/"))
-            {
                 await bot.SendMessage(chatId, "Невідома команда. Напишіть /допомога щоб побачити список доступних команд.", replyParameters: replyParams);
-            }
         }
         catch (Exception e)
         {
             Console.WriteLine($"[HandleUpdateAsync Error] {e.Message}");
             await SendAdmin("Error: " + e.Message);
+        }
+    }
+
+    async Task HandleSummaryDay(ITelegramBotClient bot, long chatId, ReplyParameters replyParams, CancellationToken cancellationToken)
+    {
+        var msgs = store.GetMessages(chatId, TimeSpan.FromDays(1));
+        if (msgs.Count == 0)
+        {
+            await bot.SendMessage(chatId, "Немає повідомлень за останню добу.", replyParameters: replyParams, cancellationToken: cancellationToken);
+            return;
+        }
+        await bot.SendMessage(chatId, $"Читаю ваші {msgs.Count} повідомлень, зачекайте трохи...", cancellationToken: cancellationToken);
+        try
+        {
+            var summary = ReplaceMsgLinks(await ai.GetSummary(msgs,
+                async msg => await bot.SendMessage(chatId, msg, cancellationToken: cancellationToken)), chatId);
+            if (summary.Length < 4096)
+                await bot.SendMessage(chatId, summary, parseMode: ParseMode.Html, replyParameters: replyParams, linkPreviewOptions: new Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true }, cancellationToken: cancellationToken);
+            else
+            {
+                var parts = summary.Select((x, i) => new { Index = i, Value = x })
+                    .GroupBy(x => x.Index / 4000)
+                    .Select(g => string.Join("", g.Select(x => x.Value)))
+                    .ToList();
+                foreach (var part in parts)
+                {
+                    await bot.SendMessage(chatId, part, parseMode: ParseMode.Html, replyParameters: replyParams, cancellationToken: cancellationToken);
+                    await Task.Delay(50, cancellationToken);
+                }
+            }
+        }
+        catch (Exception)
+        {
+            await bot.SendMessage(chatId, "Не вдалося згенерувати підсумок, спробуйте ще раз трохи пізніше", cancellationToken: cancellationToken);
+            throw;
+        }
+    }
+
+    async Task HandleSummary(ITelegramBotClient bot, long chatId, string messageText, ReplyParameters replyParams, CancellationToken cancellationToken)
+    {
+        var parts = messageText.Split(' ');
+        var hours = 1;
+        if (parts.Length > 1 && int.TryParse(parts[1], out var n))
+            hours = Math.Clamp(n, 1, 720);
+        var msgs = store.GetMessages(chatId, TimeSpan.FromHours(hours));
+        if (msgs.Count == 0)
+        {
+            await bot.SendMessage(chatId, "Немає повідомлень за вказаний період.", replyParameters: replyParams, cancellationToken: cancellationToken);
+            return;
+        }
+        var totalCount = msgs.Count;
+        if (msgs.Count > 2000) msgs = msgs.TakeLast(2000).ToList();
+        await bot.SendMessage(chatId, $"Читаю ваші {totalCount} повідомлень, зачекайте трохи...", cancellationToken: cancellationToken);
+        try
+        {
+            var prefix = totalCount > 2000 ? $"(показано останні 2000 з {totalCount} повідомлень)\n\n" : "";
+            var summary = ReplaceMsgLinks(hours == 1 ? await ai.GetSummaryHour(msgs) : await ai.GetSummary(msgs), chatId);
+            await bot.SendMessage(chatId, prefix + summary, parseMode: ParseMode.Html, linkPreviewOptions: new Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true }, cancellationToken: cancellationToken);
+        }
+        catch (Exception)
+        {
+            await bot.SendMessage(chatId, "Не вдалося згенерувати підсумок, спробуйте ще раз трохи пізніше", cancellationToken: cancellationToken);
+            throw;
+        }
+    }
+
+    async Task HandleStats(ITelegramBotClient bot, long chatId, CancellationToken cancellationToken)
+    {
+        var stats = store.GetStats(chatId, TimeSpan.FromHours(24));
+        if (stats.Count == 0)
+        {
+            await bot.SendMessage(chatId, "Немає повідомлень за останні 24 години.", cancellationToken: cancellationToken);
+            return;
+        }
+        var lines = stats.Select((s, i) =>
+        {
+            var name = s.FirstName ?? s.Username ?? "Unknown";
+            var handle = s.Username != null ? $" ({s.Username})" : "";
+            return $"{i + 1}. {name}{handle} — {s.Count} повідомлень";
+        });
+        await bot.SendMessage(chatId, "Активність за 24 години:\n\n" + string.Join("\n", lines), cancellationToken: cancellationToken);
+    }
+
+    async Task HandleDigest(ITelegramBotClient bot, long chatId, string messageText, ReplyParameters replyParams, CancellationToken cancellationToken)
+    {
+        var parts = messageText.Split(' ');
+        if (parts.Length < 2 || !parts[1].StartsWith("@"))
+        {
+            await bot.SendMessage(chatId, "Вкажіть юзернейм: /digest @username", cancellationToken: cancellationToken);
+            return;
+        }
+        var handle = parts[1].TrimStart('@');
+        var foundUserId = store.FindUserId(chatId, handle);
+        if (foundUserId == null)
+        {
+            await bot.SendMessage(chatId, $"Не знайшов {handle} в чаті за останні 24 години.", cancellationToken: cancellationToken);
+            return;
+        }
+        var msgs = store.GetUserMessages(chatId, foundUserId.Value, TimeSpan.FromHours(24));
+        if (msgs.Count == 0)
+        {
+            await bot.SendMessage(chatId, $"Не знайшов повідомлень від {handle} за останні 24 години.", cancellationToken: cancellationToken);
+            return;
+        }
+        await bot.SendMessage(chatId, "Хмм...", cancellationToken: cancellationToken);
+        var answer = await ai.GetDigest(msgs, parts[1]);
+        await bot.SendMessage(chatId, answer, replyParameters: replyParams, cancellationToken: cancellationToken);
+    }
+
+    async Task HandleQuestion(ITelegramBotClient bot, Update update, MessageModel message, long chatId, ReplyParameters replyParams)
+    {
+        message.Text = message.Text!.Replace("/питання", "").Replace("/question", "").Trim();
+        message.Text = message.Text.Replace("@revverb_bot", "").Trim();
+
+        if (string.IsNullOrWhiteSpace(message.Text) && update.Message!.ReplyToMessage == null)
+        {
+            await bot.SendMessage(chatId, "Напишіть питання після команди, наприклад:\n/питання Що таке Docker?", replyParameters: replyParams);
+            return;
+        }
+
+        await bot.SendMessage(chatId, "Хмм...");
+
+        MessageModel? replyMessage = null;
+        if (update.Message!.ReplyToMessage != null)
+            replyMessage = store.FindMessage(chatId, update.Message.ReplyToMessage.Id);
+
+        try
+        {
+            var answer = await ai.GetAnswer(message, replyMessage);
+            await bot.SendMessage(chatId, answer, replyParameters: replyParams);
+        }
+        catch (Exception)
+        {
+            await bot.SendMessage(chatId, "Не вдалося згенерувати відповідь, спробуйте ще раз трохи пізніше");
+            throw;
+        }
+    }
+
+    async Task HandleRespect(ITelegramBotClient bot, long chatId, ReplyParameters replyParams)
+    {
+        var msgs = store.GetMessages(chatId, TimeSpan.FromHours(3));
+        if (msgs.Count == 0)
+        {
+            await bot.SendMessage(chatId, "Немає повідомлень за останні 3 години.", replyParameters: replyParams);
+            return;
+        }
+        await bot.SendMessage(chatId, "Вимірюю рівень поваги, зачекайте трохи...");
+        try
+        {
+            var respect = await ai.GetRespectLevel(msgs);
+            await bot.SendMessage(chatId, respect, replyParameters: replyParams);
+        }
+        catch (Exception)
+        {
+            await bot.SendMessage(chatId, "Рівень поваги не виміряно, спробуйте ще раз трохи пізніше");
+            throw;
+        }
+    }
+
+    async Task HandleVote(ITelegramBotClient bot, Update update, long chatId)
+    {
+        if (!await IsUserAdminOrOwnerAsync(bot, chatId, update.Message!.From!.Id))
+        {
+            await bot.SendMessage(chatId, "Тільки адміни можуть створювати голосування 🙅‍♂️");
+            return;
+        }
+
+        var options = BuildVoteOptions();
+
+        await bot.SendPoll(chatId, VoteQuestion, options, false, allowsMultipleAnswers: true);
+    }
+
+    async Task HandleReadme(ITelegramBotClient bot, long chatId, ReplyParameters replyParams, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var readmeUrl = "https://raw.githubusercontent.com/pylypenko-smplt/MySummaryBot/HEAD/README.md";
+            var response = await ogHttpClient.GetAsync(readmeUrl, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                await bot.SendMessage(chatId, "README не знайдено", replyParameters: replyParams, cancellationToken: cancellationToken);
+                return;
+            }
+
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+            content = FormatReadme(content);
+
+            if (content.Length <= 4096)
+            {
+                await bot.SendMessage(chatId, content, parseMode: Telegram.Bot.Types.Enums.ParseMode.Html, replyParameters: replyParams, cancellationToken: cancellationToken);
+            }
+            else
+            {
+                var truncated = content[..3900];
+                var lastNl = truncated.LastIndexOf('\n');
+                if (lastNl > 3000) truncated = truncated[..lastNl];
+                await bot.SendMessage(chatId, truncated, parseMode: Telegram.Bot.Types.Enums.ParseMode.Html, replyParameters: replyParams, cancellationToken: cancellationToken);
+            }
+        }
+        catch (Exception)
+        {
+            await bot.SendMessage(chatId, "Не вдалося завантажити README", replyParameters: replyParams, cancellationToken: cancellationToken);
+            throw;
+        }
+    }
+
+    async Task HandleHelp(ITelegramBotClient bot, long chatId)
+    {
+        var helpMessage =
+            "/summary (/підсумок) [N] - підсумок за N годин (за замовч. 1г)\n" +
+            "/summary_day (/підсумок_день) - підсумок за останні 24 години\n" +
+            "/stats (/статистика) - активність учасників за 24 години\n" +
+            "/digest @username (/дайджест) - що написав учасник за 24 години\n" +
+            "/question (/питання) [питання] - відповідь на питання\n" +
+            "  також можна тегнути @revverb_bot з питанням\n" +
+            "/respect (/повага) - виміряти рівень поваги\n" +
+            "/vote (/голосування) - голосування за зустріч (для адмінів)\n" +
+            "/readme - README чату\n" +
+            "/help (/допомога) - показати цей список команд";
+
+        if (chatId.ToString() == adminChatId)
+            helpMessage +=
+                "\n/chats - список активних чатів за 24 години\n" +
+                "/prompt_summary [prompt] - змінити промпт для підсумки\n" +
+                "/prompt_summary_reset - скинути промпт для підсумки\n" +
+                "/prompt_respect [prompt] - змінити промпт для вимірювання поваги\n" +
+                "/prompt_respect_reset - скинути промпт для вимірювання поваги\n" +
+                "/prompt_answer [prompt] - змінити промпт для відповіді на питання\n" +
+                "/prompt_answer_reset - скинути промпт для відповіді на питання\n" +
+                "/model [model] - змінити модель для генерації тексту\n" +
+                "/model_reset - скинути модель для генерації тексту";
+
+        await bot.SendMessage(chatId, helpMessage);
+    }
+
+    async Task HandleAdminCommand(ITelegramBotClient bot, long chatId, string messageText, ReplyParameters replyParams, CancellationToken cancellationToken)
+    {
+        // _reset variants must be checked before their prefix counterparts
+        if (messageText.StartsWith("/prompt_summary_reset"))
+        {
+            ai.ResetSummaryPrompt();
+            await bot.SendMessage(chatId, "Prompt reset");
+        }
+        else if (messageText.StartsWith("/prompt_summary"))
+        {
+            var value = messageText.Replace("/prompt_summary", "").Trim();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                await bot.SendMessage(chatId, "Вкажіть промпт після команди, наприклад:\n/prompt_summary Summarize briefly.");
+                return;
+            }
+            ai.SummaryPrompt = value;
+            await bot.SendMessage(chatId, "Prompt updated");
+        }
+        else if (messageText.StartsWith("/prompt_respect_reset"))
+        {
+            ai.ResetRespectPrompt();
+            await bot.SendMessage(chatId, "Prompt reset");
+        }
+        else if (messageText.StartsWith("/prompt_respect"))
+        {
+            var value = messageText.Replace("/prompt_respect", "").Trim();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                await bot.SendMessage(chatId, "Вкажіть промпт після команди, наприклад:\n/prompt_respect Evaluate respect level.");
+                return;
+            }
+            ai.RespectPrompt = value;
+            await bot.SendMessage(chatId, "Prompt updated");
+        }
+        else if (messageText.StartsWith("/prompt_answer_reset"))
+        {
+            ai.ResetAnswerPrompt();
+            await bot.SendMessage(chatId, "Prompt reset");
+        }
+        else if (messageText.StartsWith("/prompt_answer"))
+        {
+            var value = messageText.Replace("/prompt_answer", "").Trim();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                await bot.SendMessage(chatId, "Вкажіть промпт після команди, наприклад:\n/prompt_answer Answer concisely.");
+                return;
+            }
+            ai.AnswerPrompt = value;
+            await bot.SendMessage(chatId, "Prompt updated");
+        }
+        else if (messageText.StartsWith("/model_reset"))
+        {
+            ai.ResetModel();
+            await bot.SendMessage(chatId, "Model reset");
+        }
+        else if (messageText.StartsWith("/model"))
+        {
+            var value = messageText.Replace("/model", "").Trim();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                await bot.SendMessage(chatId, "Вкажіть модель після команди, наприклад:\n/model gpt-5-mini");
+                return;
+            }
+            ai.Model = value;
+            await bot.SendMessage(chatId, "Model updated");
+        }
+        else if (messageText == "/chats")
+        {
+            var chats = store.GetActiveChats(DateTime.UtcNow.AddHours(-24));
+            if (chats.Count == 0)
+            {
+                await bot.SendMessage(chatId, "Активних чатів немає");
+            }
+            else
+            {
+                var lines = new List<string> { "Активні чати за 24г:" };
+                foreach (var cid in chats)
+                {
+                    try
+                    {
+                        var info = await bot.GetChat(cid, cancellationToken);
+                        var count = await bot.GetChatMemberCount(cid, cancellationToken);
+                        var name = info.Title ?? info.Username ?? info.FirstName ?? cid.ToString();
+                        lines.Add($"{name} ({count} уч.) — {cid}");
+                    }
+                    catch
+                    {
+                        lines.Add(cid.ToString());
+                    }
+                }
+                await bot.SendMessage(chatId, string.Join("\n", lines));
+            }
+        }
+        else if (messageText.StartsWith("/"))
+        {
+            await bot.SendMessage(chatId, "Невідома команда. Напишіть /допомога щоб побачити список доступних команд.", replyParameters: replyParams);
         }
     }
 
