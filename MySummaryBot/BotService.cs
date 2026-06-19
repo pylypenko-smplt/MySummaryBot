@@ -691,9 +691,11 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
 
     async Task HandleErrorAsync(ITelegramBotClient bot, Exception exception, CancellationToken cancellationToken)
     {
-        var emsg = $"[HandleErrorAsync] {exception.Message}; \n {exception.StackTrace}";
-        Console.WriteLine(emsg);
-        await SendAdmin(emsg, cancellationToken);
+        Console.WriteLine($"[HandleErrorAsync] {exception.Message}");
+        // Транзиентні мережеві помилки long-polling (timeout / обрив getUpdates) — звичайний шум, не спамимо адмінку.
+        // Сповіщаємо лише про реальні помилки Telegram API.
+        if (exception is Telegram.Bot.Exceptions.ApiRequestException)
+            await SendAdmin($"[HandleErrorAsync] {exception.Message}", cancellationToken);
     }
 
     async Task FetchAndStoreLinkPreviewAsync(long chatId, int msgId, string url)
