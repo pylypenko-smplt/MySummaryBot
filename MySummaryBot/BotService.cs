@@ -5,9 +5,10 @@ using Telegram.Bot.Types.InlineQueryResults;
 
 public class BotService(TelegramBotClient botClient, AiService ai, MessageStore store, string? adminChatId, HttpClient ogHttpClient, ImageSearchService imageSearch, WeatherService weather)
 {
-    static readonly TimeZoneInfo KyivTz = GetKyivTz();
-    const int VotePostHour = 13;
-    const int VoteResultHour = 18;
+    // Голосування постимо тільки в чат Revverb. Час — у UTC (без таймзон/DST).
+    const long RevverbChatId = -1002371791013;
+    const int VotePostHour = 10;   // UTC ≈ 13:00 Київ (літо)
+    const int VoteResultHour = 15; // UTC ≈ 18:00 Київ (літо)
     const string VoteQuestion = "Коли збираємось?";
 
     // Локації клубу. Covered — крите (рятує від дощу); Shade — є тінь (важливо в спеку);
@@ -21,12 +22,6 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
         ("Блокбастер",     true,  1, 1, 2, 0),
         ("Гараж",          false, 0, 1, 2, 2),
     ];
-
-    static TimeZoneInfo GetKyivTz()
-    {
-        try { return TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv"); }
-        catch { return TimeZoneInfo.CreateCustomTimeZone("UA", TimeSpan.FromHours(2), "UA", "UA"); }
-    }
 
     static string IsoWeekKey(DateTime localDate)
         => $"{System.Globalization.ISOWeek.GetYear(localDate):D4}-W{System.Globalization.ISOWeek.GetWeekOfYear(localDate):D2}";
@@ -91,31 +86,28 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                         }
                     }
 
-                    var kyivNow = TimeZoneInfo.ConvertTimeFromUtc(utcNow, KyivTz);
-                    var week = IsoWeekKey(kyivNow);
+                    var week = IsoWeekKey(utcNow);
 
-                    if (kyivNow.DayOfWeek == DayOfWeek.Wednesday && kyivNow.Hour >= VotePostHour)
+                    if (utcNow.DayOfWeek == DayOfWeek.Wednesday && utcNow.Hour >= VotePostHour
+                        && !store.HasVotePollForWeek(RevverbChatId, week))
                     {
-                        var activeChats = store.GetActiveChats(utcNow.AddHours(-24));
-                        foreach (var voteChatId in activeChats.Where(c => !store.HasVotePollForWeek(c, week)))
+                        try
                         {
-                            try
-                            {
-                                // Зберігаємо тільки після успішної відправки (message_id > 0) —
-                                // якщо відправка впала, наступний тік середи повторить.
-                                var poll = await botClient.SendPoll(voteChatId, VoteQuestion, BuildVoteOptions(), false, allowsMultipleAnswers: true, cancellationToken: token);
-                                store.SaveVotePoll(voteChatId, week, poll.MessageId);
-                                await botClient.PinChatMessage(voteChatId, poll.MessageId, cancellationToken: token);
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine($"[Vote Post Error] chatId={voteChatId}: {ex.Message}");
-                                await SendAdmin($"[Vote Post Error] chatId={voteChatId}: {ex.Message}", token);
-                            }
+                            // Зберігаємо тільки після успішної відправки (message_id > 0) —
+                            // якщо відправка впала, наступний тік середи повторить.
+                            var poll = await botClient.SendPoll(RevverbChatId, VoteQuestion, BuildVoteOptions(), false, allowsMultipleAnswers: true, cancellationToken: token);
+                            store.SaveVotePoll(RevverbChatId, week, poll.MessageId);
+                            // Pin не критичний: якщо немає прав — опитування все одно опубліковане.
+                            try { await botClient.PinChatMessage(RevverbChatId, poll.MessageId, cancellationToken: token); } catch { }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[Vote Post Error] chatId={RevverbChatId}: {ex.Message}");
+                            await SendAdmin($"[Vote Post Error] chatId={RevverbChatId}: {ex.Message}", token);
                         }
                     }
 
-                    if (kyivNow.DayOfWeek == DayOfWeek.Friday && kyivNow.Hour >= VoteResultHour)
+                    if (utcNow.DayOfWeek == DayOfWeek.Friday && utcNow.Hour >= VoteResultHour)
                     {
                         foreach (var (resultChatId, pollMsgId) in store.GetOpenVotePolls(week))
                         {
