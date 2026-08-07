@@ -97,8 +97,9 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                             // якщо відправка впала, наступний тік середи повторить.
                             var poll = await botClient.SendPoll(RevverbChatId, VoteQuestion, BuildVoteOptions(), false, allowsMultipleAnswers: true, cancellationToken: token);
                             store.SaveVotePoll(RevverbChatId, week, poll.MessageId);
-                            // Pin не критичний: якщо немає прав — опитування все одно опубліковане.
-                            try { await botClient.PinChatMessage(RevverbChatId, poll.MessageId, cancellationToken: token); } catch { }
+                            // Pin не критичний: якщо немає прав — опитування все одно опубліковане, але алертимо адміна.
+                            try { await botClient.PinChatMessage(RevverbChatId, poll.MessageId, disableNotification: false, cancellationToken: token); }
+                            catch (Exception pinEx) { await SendAdmin($"[Vote Pin Error] {pinEx.Message}", token); }
                         }
                         catch (Exception ex)
                         {
@@ -116,9 +117,9 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                             try
                             {
                                 var poll = await botClient.StopPoll(resultChatId, pollMsgId, cancellationToken: token);
-                                var resultText = BuildVoteResult(poll);
-
                                 var winnerSlot = ParseWinnerSlot(poll);
+                                var resultText = BuildVoteResult(poll, winnerSlot);
+
                                 if (winnerSlot is { } slot)
                                 {
                                     var w = await weather.TryGetSlotWeather(slot.Day, slot.Hour);
@@ -130,7 +131,7 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
 
                                 try { await botClient.UnpinChatMessage(resultChatId, pollMsgId, cancellationToken: token); } catch { }
                                 var resultMsg = await botClient.SendMessage(resultChatId, resultText, parseMode: Telegram.Bot.Types.Enums.ParseMode.Html, linkPreviewOptions: new Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true }, cancellationToken: token);
-                                await botClient.PinChatMessage(resultChatId, resultMsg.MessageId, cancellationToken: token);
+                                await botClient.PinChatMessage(resultChatId, resultMsg.MessageId, disableNotification: false, cancellationToken: token);
                             }
                             catch (Exception ex)
                             {
@@ -851,8 +852,8 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
         return chosen;
     }
 
-    // Повертає (день, година) єдиного переможця серед слотів сб/нд. null якщо нічия/нема голосів.
-    static (DayOfWeek Day, int Hour)? ParseWinnerSlot(Telegram.Bot.Types.Poll poll)
+    // Повертає слот-переможець серед сб/нд; при нічиї — жереб серед лідерів. null якщо нема голосів.
+    static (DayOfWeek Day, int Hour, string Text, bool WasTie)? ParseWinnerSlot(Telegram.Bot.Types.Poll poll)
     {
         static bool IsSlot(string t) => t.StartsWith("сб ") || t.StartsWith("нд ");
         var slots = poll.Options.Where(o => IsSlot(o.Text)).ToList();
@@ -860,11 +861,11 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
         var max = slots.Max(o => o.VoterCount);
         if (max == 0) return null;
         var winners = slots.Where(o => o.VoterCount == max).ToList();
-        if (winners.Count != 1) return null; // нічия за часом — місце не обираємо
-        var parts = winners[0].Text.Split(' ');
+        var chosen = winners[Random.Shared.Next(winners.Count)];
+        var parts = chosen.Text.Split(' ');
         if (parts.Length < 2 || !int.TryParse(parts[1], out var hour)) return null;
         var day = parts[0] == "нд" ? DayOfWeek.Sunday : DayOfWeek.Saturday;
-        return (day, hour);
+        return (day, hour, chosen.Text, winners.Count > 1);
     }
 
     static List<InputPollOption> BuildVoteOptions() => new()
@@ -874,7 +875,7 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
         new(GetRandomEmoji())
     };
 
-    static string BuildVoteResult(Telegram.Bot.Types.Poll poll)
+    static string BuildVoteResult(Telegram.Bot.Types.Poll poll, (DayOfWeek Day, int Hour, string Text, bool WasTie)? winner)
     {
         // Лічимо лише слоти зустрічі (сб/нд). Емодзі-джокер = "не приїду", у результат не входить.
         static bool IsSlot(string t) => t.StartsWith("сб ") || t.StartsWith("нд ");
@@ -896,9 +897,14 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
         var max = slots.Max(o => o.VoterCount);
         var winners = slots.Where(o => o.VoterCount == max).Select(o => System.Net.WebUtility.HtmlEncode(o.Text)).ToList();
         sb.AppendLine();
-        sb.AppendLine(winners.Count == 1
-            ? $"Перемагає: <b>{winners[0]}</b> ({max})"
-            : $"Нічия: <b>{string.Join(", ", winners)}</b> ({max})");
+        if (winners.Count == 1)
+            sb.AppendLine($"Перемагає: <b>{winners[0]}</b> ({max})");
+        else
+        {
+            sb.AppendLine($"Нічия: <b>{string.Join(", ", winners)}</b> ({max})");
+            if (winner is { WasTie: true } w)
+                sb.AppendLine($"Жереб обрав: <b>{System.Net.WebUtility.HtmlEncode(w.Text)}</b>");
+        }
         return sb.ToString().Trim();
     }
 
