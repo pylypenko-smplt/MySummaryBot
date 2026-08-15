@@ -18,3 +18,13 @@ jobs:
         run: flyctl deploy --remote-only --ha=false
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Ensure machine is running
+        working-directory: MySummaryBot
+        run: |
+          # Worker machine (no [http_service]) is left stopped after deploy and
+          # nothing wakes it, so start every machine of the app explicitly.
+          for id in $(flyctl machine list --json | jq -r '.[].id'); do
+            flyctl machine start "$id" || true
+          done
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
