@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 
@@ -47,11 +48,25 @@ try
     var bot = new BotService(botClient, ai, store, adminChatId, ogHttpClient, imageSearch, weather);
     var cts = new CancellationTokenSource();
 
-    Console.CancelKeyPress += (_, e) =>
+    void HandleStopSignal(PosixSignalContext ctx)
     {
-        e.Cancel = true;
+        ctx.Cancel = true;
+        try
+        {
+            // PosixSignalRegistration handlers are synchronous; blocking here is the only
+            // option to notify admin before the process shuts down.
+            using var notifyCts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+            bot.SendAdmin($"Bot stopping ({ctx.Signal})", notifyCts.Token).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to notify admin on shutdown: {ex.Message}");
+        }
         cts.Cancel();
-    };
+    }
+
+    using var sigtermRegistration = PosixSignalRegistration.Create(PosixSignal.SIGTERM, HandleStopSignal);
+    using var sigintRegistration = PosixSignalRegistration.Create(PosixSignal.SIGINT, HandleStopSignal);
 
     await botClient.SetMyCommands([
         new BotCommand { Command = "summary", Description = "Підсумок за останню годину" },
@@ -73,6 +88,7 @@ try
 
     await Task.WhenAny(receivingTask, backgroundTask);
     Console.WriteLine("Одна з задач завершилася. Зупиняємо...");
+    await bot.SendAdmin("Bot stopping: одна з задач завершилася сама");
     cts.Cancel();
 
     await Task.WhenAll(receivingTask, backgroundTask);
