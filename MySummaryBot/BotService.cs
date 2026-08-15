@@ -271,7 +271,7 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
             if (messageText == null)
                 return;
 
-            if (_rnd.Next(0, 500) == 0)
+            if (_rnd.Next(0, 300) == 0)
                 await bot.SendMessage(chatId, "Друже, ти дурачок?", replyParameters: replyParams, cancellationToken: cancellationToken);
 
             if ((messageText.Contains("twingo", StringComparison.InvariantCultureIgnoreCase) ||
