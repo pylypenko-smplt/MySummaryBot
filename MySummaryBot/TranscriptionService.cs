@@ -20,7 +20,9 @@ public class TranscriptionService(HttpClient httpClient)
             fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
             content.Add(fileContent, "file", fileName);
             content.Add(new StringContent("whisper-1"), "model");
-            content.Add(new StringContent("ru"), "language");
+            // Мову НЕ фіксуємо: чат україномовний, але в ньому трапляється й російська
+            // та польська. Whisper визначає мову сам і робить це надійніше, ніж
+            // примусове language= — з жорстким "ru" українська мова псувалася.
             content.Add(new StringContent("text"), "response_format");
 
             using var response = await httpClient.PostAsync(
