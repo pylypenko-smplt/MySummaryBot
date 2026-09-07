@@ -239,7 +239,7 @@ public class AiService(HttpClient httpClient)
                 line.Append($" [{m.MediaType}]");
 
             if (m.Text != null)
-                line.Append($": {m.Text}");
+                line.Append(m.IsTranscribed ? $": [голосом] {m.Text}" : $": {m.Text}");
 
             if (m.LinkPreview != null)
                 line.Append($" 🔗 {m.LinkPreview}");

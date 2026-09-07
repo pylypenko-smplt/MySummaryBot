@@ -34,6 +34,7 @@ public class MessageStore : IDisposable
         Execute("CREATE INDEX IF NOT EXISTS idx_chat_ts ON messages(chat_id, timestamp)");
         Execute("CREATE INDEX IF NOT EXISTS idx_chat_user ON messages(chat_id, user_id)");
         TryExecute("ALTER TABLE messages ADD COLUMN media_unique_id TEXT");
+        TryExecute("ALTER TABLE messages ADD COLUMN is_transcribed INTEGER NOT NULL DEFAULT 0");
         Execute("CREATE INDEX IF NOT EXISTS idx_url ON messages(chat_id, url_normalized) WHERE url_normalized IS NOT NULL");
         Execute("CREATE INDEX IF NOT EXISTS idx_fwd ON messages(chat_id, fwd_channel_id, fwd_message_id) WHERE fwd_channel_id IS NOT NULL");
         Execute("CREATE INDEX IF NOT EXISTS idx_media ON messages(chat_id, media_unique_id) WHERE media_unique_id IS NOT NULL");
@@ -79,8 +80,8 @@ public class MessageStore : IDisposable
         {
             using var cmd = _connection.CreateCommand();
             cmd.CommandText = """
-                INSERT INTO messages (msg_id, chat_id, user_id, username, first_name, language, text, media_type, link_preview, url_normalized, media_unique_id, fwd_channel_id, fwd_message_id, timestamp, reply_to)
-                VALUES (@msg_id, @chat_id, @user_id, @username, @first_name, @language, @text, @media_type, @link_preview, @url_normalized, @media_unique_id, @fwd_channel_id, @fwd_message_id, @timestamp, @reply_to)
+                INSERT INTO messages (msg_id, chat_id, user_id, username, first_name, language, text, media_type, link_preview, url_normalized, media_unique_id, fwd_channel_id, fwd_message_id, timestamp, reply_to, is_transcribed)
+                VALUES (@msg_id, @chat_id, @user_id, @username, @first_name, @language, @text, @media_type, @link_preview, @url_normalized, @media_unique_id, @fwd_channel_id, @fwd_message_id, @timestamp, @reply_to, @is_transcribed)
                 """;
             cmd.Parameters.AddWithValue("@msg_id", msg.MessageId);
             cmd.Parameters.AddWithValue("@chat_id", msg.ChatId);
@@ -97,6 +98,7 @@ public class MessageStore : IDisposable
             cmd.Parameters.AddWithValue("@fwd_message_id", (object?)msg.FwdMessageId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@timestamp", msg.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss"));
             cmd.Parameters.AddWithValue("@reply_to", (object?)msg.ReplyToMessageId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@is_transcribed", msg.IsTranscribed ? 1 : 0);
             cmd.ExecuteNonQuery();
         }
     }
@@ -363,7 +365,8 @@ public class MessageStore : IDisposable
                 FwdChannelId = reader.IsDBNull(reader.GetOrdinal("fwd_channel_id")) ? null : reader.GetInt64(reader.GetOrdinal("fwd_channel_id")),
                 FwdMessageId = reader.IsDBNull(reader.GetOrdinal("fwd_message_id")) ? null : reader.GetInt32(reader.GetOrdinal("fwd_message_id")),
                 Timestamp = DateTime.Parse(reader.GetString(reader.GetOrdinal("timestamp"))),
-                ReplyToMessageId = reader.IsDBNull(reader.GetOrdinal("reply_to")) ? null : reader.GetInt32(reader.GetOrdinal("reply_to"))
+                ReplyToMessageId = reader.IsDBNull(reader.GetOrdinal("reply_to")) ? null : reader.GetInt32(reader.GetOrdinal("reply_to")),
+                IsTranscribed = reader.GetInt32(reader.GetOrdinal("is_transcribed")) != 0
             });
         }
         return result;

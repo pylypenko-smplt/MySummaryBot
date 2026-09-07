@@ -41,11 +41,12 @@ var dbPath = Path.Combine(Environment.GetEnvironmentVariable("DATA_DIR") ?? "/da
 using var store = new MessageStore(dbPath);
 
 var ai = new AiService(httpClient);
+var transcription = new TranscriptionService(httpClient);
 
 try
 {
     var botClient = new TelegramBotClient(token);
-    var bot = new BotService(botClient, ai, store, adminChatId, ogHttpClient, imageSearch, weather);
+    var bot = new BotService(botClient, ai, store, adminChatId, ogHttpClient, imageSearch, weather, transcription);
     var cts = new CancellationTokenSource();
 
     void HandleStopSignal(PosixSignalContext ctx)

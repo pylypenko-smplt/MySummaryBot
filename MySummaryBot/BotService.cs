@@ -3,7 +3,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.InlineQueryResults;
 
-public class BotService(TelegramBotClient botClient, AiService ai, MessageStore store, string? adminChatId, HttpClient ogHttpClient, ImageSearchService imageSearch, WeatherService weather)
+public class BotService(TelegramBotClient botClient, AiService ai, MessageStore store, string? adminChatId, HttpClient ogHttpClient, ImageSearchService imageSearch, WeatherService weather, TranscriptionService transcription)
 {
     // Голосування постимо тільки в чат Revverb. Час — у UTC (без таймзон/DST).
     const long RevverbChatId = -1002371791013;
@@ -221,6 +221,17 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
             if (update.Message.From?.IsBot == true)
                 return;
 
+            var isTranscribed = false;
+            if (messageText == null && (mediaType == "voice" || mediaType == "video_note"))
+            {
+                var transcript = await TranscribeVoiceOrVideoNoteAsync(bot, update.Message, mediaType, userName, chatId, cancellationToken);
+                if (transcript != null)
+                {
+                    messageText = transcript;
+                    isTranscribed = true;
+                }
+            }
+
             var message = new MessageModel
             {
                 MessageId = update.Message.MessageId,
@@ -231,7 +242,8 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                 FirstName = userName,
                 Timestamp = DateTime.UtcNow,
                 Text = messageText,
-                ReplyToMessageId = update.Message.ReplyToMessage?.Id
+                ReplyToMessageId = update.Message.ReplyToMessage?.Id,
+                IsTranscribed = isTranscribed
             };
 
             message.MediaType = mediaType;
@@ -721,7 +733,54 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
         if (msg.Sticker != null) return "sticker";
         if (msg.Document != null) return "document";
         if (msg.Voice != null) return "voice";
+        if (msg.VideoNote != null) return "video_note";
         return null;
+    }
+
+    // Скачує voice/video_note з Telegram, транскрибує через Whisper і, якщо текст не надто
+    // короткий (не спам на кшталт "ок"), постить його в чат реплаєм на оригінал.
+    // Помилки на будь-якому кроці логуються і повертають null — обробка повідомлення продовжується як зараз (без тексту).
+    const int MinAnnounceChars = 3;
+    const int MaxTelegramMessageLength = 4096;
+
+    async Task<string?> TranscribeVoiceOrVideoNoteAsync(
+        ITelegramBotClient bot, Telegram.Bot.Types.Message msg, string mediaType, string? userName, long chatId, CancellationToken cancellationToken)
+    {
+        var fileId = msg.Voice?.FileId ?? msg.VideoNote?.FileId;
+        if (fileId == null)
+            return null;
+
+        string? transcript;
+        try
+        {
+            using var stream = new MemoryStream();
+            await bot.GetInfoAndDownloadFile(fileId, stream, cancellationToken);
+            stream.Position = 0;
+            var fileName = mediaType == "video_note" ? "note.mp4" : "voice.oga";
+            transcript = await transcription.TranscribeAsync(stream, fileName, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Transcribe Error] Download failed: {ex.Message}");
+            return null;
+        }
+
+        transcript = transcript?.Trim();
+        if (string.IsNullOrEmpty(transcript))
+            return null;
+
+        if (transcript.Length >= MinAnnounceChars)
+        {
+            var announceText = $"{userName ?? "Хтось"} сказав: {transcript}";
+            if (announceText.Length > MaxTelegramMessageLength)
+                announceText = announceText[..(MaxTelegramMessageLength - 1)] + "…";
+
+            await bot.SendMessage(chatId, announceText,
+                replyParameters: new ReplyParameters { MessageId = msg.MessageId },
+                cancellationToken: cancellationToken);
+        }
+
+        return transcript;
     }
 
     static async Task<bool> IsUserAdminOrOwnerAsync(ITelegramBotClient bot, long chatId, long userId)

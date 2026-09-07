@@ -23,6 +23,12 @@ public class MessageModel
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? MediaType { get; set; }
 
+    // Текст отримано через транскрипцію (Whisper), а не набраний руками — Whisper помиляється
+    // в іменах/термінах, тож при саммарі це має бути видно окремо від набраного тексту.
+    [JsonPropertyName("is_transcribed")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsTranscribed { get; set; }
+
     [JsonPropertyName("link_preview")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? LinkPreview { get; set; }
