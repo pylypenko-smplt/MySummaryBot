@@ -9,7 +9,7 @@ public class AiService(HttpClient httpClient)
     const string SmartModel = "gpt-5.2";
 
     // Курс USD→UAH для оцінки вартості запиту. Береться з env USD_UAH_RATE, інакше дефолт.
-    static readonly decimal UsdUah =
+    public static readonly decimal UsdUah =
         decimal.TryParse(Environment.GetEnvironmentVariable("USD_UAH_RATE"),
             System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var r) && r > 0
             ? r : 41.5m;

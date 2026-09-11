@@ -5,6 +5,9 @@ public class TranscriptionService(HttpClient httpClient)
     // Ліміт OpenAI Audio API на розмір файлу.
     public const long MaxFileSizeBytes = 25 * 1024 * 1024;
 
+    // whisper-1 тарифікується за хвилинами аудіо, а не за токенами.
+    public const decimal PricePerMinuteUsd = 0.006m;
+
     public async Task<string?> TranscribeAsync(Stream audio, string fileName, CancellationToken cancellationToken)
     {
         if (audio.Length > MaxFileSizeBytes)

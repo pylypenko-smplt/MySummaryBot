@@ -771,9 +771,14 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
 
         if (transcript.Length >= MinAnnounceChars)
         {
+            var durationSeconds = msg.Voice?.Duration ?? msg.VideoNote?.Duration ?? 0;
+            var costUah = durationSeconds / 60m * TranscriptionService.PricePerMinuteUsd * AiService.UsdUah;
+            var costLine = $"\n\n*Витрачено: {costUah:F2} грн*";
+
             var announceText = $"{userName ?? "Хтось"} сказав: {transcript}";
-            if (announceText.Length > MaxTelegramMessageLength)
-                announceText = announceText[..(MaxTelegramMessageLength - 1)] + "…";
+            if (announceText.Length + costLine.Length > MaxTelegramMessageLength)
+                announceText = announceText[..(MaxTelegramMessageLength - costLine.Length - 1)] + "…";
+            announceText += costLine;
 
             await bot.SendMessage(chatId, announceText,
                 replyParameters: new ReplyParameters { MessageId = msg.MessageId },
