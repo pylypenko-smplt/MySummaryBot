@@ -3,28 +3,9 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.InlineQueryResults;
 
-public class BotService(TelegramBotClient botClient, AiService ai, MessageStore store, string? adminChatId, HttpClient ogHttpClient, ImageSearchService imageSearch, WeatherService weather, TranscriptionService transcription)
+public class BotService(TelegramBotClient botClient, AiService ai, MessageStore store, string? adminChatId, HttpClient ogHttpClient, ImageSearchService imageSearch, TranscriptionService transcription)
 {
-    // Голосування постимо тільки в чат Revverb. Час — у UTC (без таймзон/DST).
-    const long RevverbChatId = -1002371791013;
-    const int VotePostHour = 10;   // UTC ≈ 13:00 Київ (літо)
-    const int VoteResultHour = 15; // UTC ≈ 18:00 Київ (літо)
     const string VoteQuestion = "Коли збираємось?";
-
-    // Локації клубу. Covered — крите (рятує від дощу); Shade — є тінь (важливо в спеку);
-    // Infra — поряд кафе/заправка; Space — місткість парковки (0 мало / 1 середньо / 2 багато);
-    // Pref — базова симпатія чату (0..4), діє в будь-яку погоду.
-    static readonly (string Name, bool Covered, int Shade, int Infra, int Space, int Pref)[] Places =
-    [
-        ("КПІ",            false, 1, 0, 2, 3),
-        ("ЗАГС",           false, 0, 1, 0, 1),
-        ("Мак на Дружбі",  false, 1, 1, 1, 4),
-        ("Блокбастер",     true,  1, 1, 2, 0),
-        ("Гараж",          false, 0, 1, 2, 2),
-    ];
-
-    static string IsoWeekKey(DateTime localDate)
-        => $"{System.Globalization.ISOWeek.GetYear(localDate):D4}-W{System.Globalization.ISOWeek.GetWeekOfYear(localDate):D2}";
 
     readonly Random _rnd = new();
 
@@ -82,61 +63,6 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
                             {
                                 Console.WriteLine($"[Digest Error] chatId={digestChatId}: {ex.Message}");
                                 await SendAdmin($"[Digest Error] chatId={digestChatId}: {ex.Message}", token);
-                            }
-                        }
-                    }
-
-                    var week = IsoWeekKey(utcNow);
-
-                    if (utcNow.DayOfWeek == DayOfWeek.Wednesday && utcNow.Hour >= VotePostHour
-                        && !store.HasVotePollForWeek(RevverbChatId, week))
-                    {
-                        try
-                        {
-                            // Зберігаємо тільки після успішної відправки (message_id > 0) —
-                            // якщо відправка впала, наступний тік середи повторить.
-                            var poll = await botClient.SendPoll(RevverbChatId, VoteQuestion, BuildVoteOptions(), false, allowsMultipleAnswers: true, cancellationToken: token);
-                            store.SaveVotePoll(RevverbChatId, week, poll.MessageId);
-                            // Pin не критичний: якщо немає прав — опитування все одно опубліковане, але алертимо адміна.
-                            try { await botClient.PinChatMessage(RevverbChatId, poll.MessageId, disableNotification: false, cancellationToken: token); }
-                            catch (Exception pinEx) { await SendAdmin($"[Vote Pin Error] {pinEx.Message}", token); }
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"[Vote Post Error] chatId={RevverbChatId}: {ex.Message}");
-                            await SendAdmin($"[Vote Post Error] chatId={RevverbChatId}: {ex.Message}", token);
-                        }
-                    }
-
-                    if (utcNow.DayOfWeek == DayOfWeek.Friday && utcNow.Hour >= VoteResultHour)
-                    {
-                        foreach (var (resultChatId, pollMsgId) in store.GetOpenVotePolls(week))
-                        {
-                            store.MarkVotePollClosed(resultChatId, week);
-                            if (pollMsgId == 0) continue;
-                            try
-                            {
-                                var poll = await botClient.StopPoll(resultChatId, pollMsgId, cancellationToken: token);
-                                var winnerSlot = ParseWinnerSlot(poll);
-                                var resultText = BuildVoteResult(poll, winnerSlot);
-
-                                if (winnerSlot is { } slot)
-                                {
-                                    var w = await weather.TryGetSlotWeather(slot.Day, slot.Hour);
-                                    var place = PickPlace(w);
-                                    resultText += w == null
-                                        ? $"\n\n🏁 Місце: <b>{System.Net.WebUtility.HtmlEncode(place)}</b>"
-                                        : $"\n\n🏁 Місце: <b>{System.Net.WebUtility.HtmlEncode(place)}</b> — {WeatherService.Emoji(w.Code)} {Math.Round(w.TempC):+0;-0}°";
-                                }
-
-                                try { await botClient.UnpinChatMessage(resultChatId, pollMsgId, cancellationToken: token); } catch { }
-                                var resultMsg = await botClient.SendMessage(resultChatId, resultText, parseMode: Telegram.Bot.Types.Enums.ParseMode.Html, linkPreviewOptions: new Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true }, cancellationToken: token);
-                                await botClient.PinChatMessage(resultChatId, resultMsg.MessageId, disableNotification: false, cancellationToken: token);
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine($"[Vote Result Error] chatId={resultChatId}: {ex.Message}");
-                                await SendAdmin($"[Vote Result Error] chatId={resultChatId}: {ex.Message}", token);
                             }
                         }
                     }
@@ -876,101 +802,12 @@ public class BotService(TelegramBotClient botClient, AiService ai, MessageStore 
             text, @"\[msg:(\d+)\]", m => $"<a href=\"https://t.me/c/{positiveId}/{m.Groups[1].Value}\">→</a>");
     }
 
-    const double PrefWeight = 2.0; // вага базової симпатії, однакова в усі погоди
-    const double ColdC = 7.0;      // нижче цієї температури — холодно, віддаємо перевагу критому
-
-    string PickPlace(WeatherService.SlotWeather? w)
-    {
-        var rain = w is { PrecipMm: >= 0.3 };
-        var cold = !rain && w is not null && w.TempC < ColdC;
-        var hot = !rain && w is not null && w.TempC >= 25;
-
-        // Ваги атрибутів за погодною групою: (crite, тінь, інфра, місткість).
-        var (wCov, wShade, wInfra, wSpace) =
-            rain || cold ? (10.0, 0.0, 2.0, 1.0) : // дощ або холод — критично крите
-            hot          ? (2.0, 6.0, 2.0, 2.0)  : // спека — критично тінь
-                           (1.0, 1.0, 4.0, 4.0);   // норма — цінуємо інфру та місткість
-
-        var lastUsed = store.GetPlaceLastUsed();
-        var today = DateTime.UtcNow.Date;
-
-        string? best = null;
-        var bestScore = double.NegativeInfinity;
-        foreach (var p in Places)
-        {
-            var score = wCov * (p.Covered ? 1 : 0)
-                        + wShade * p.Shade
-                        + wInfra * p.Infra
-                        + wSpace * (p.Space / 2.0)
-                        + PrefWeight * p.Pref;
-
-            // Штраф за нещодавнє використання (різноманіття): до 4 тижнів тому, лінійно згасає.
-            if (lastUsed.TryGetValue(p.Name, out var d) && DateTime.TryParse(d, out var last))
-                score -= Math.Max(0, 4 - (today - last.Date).TotalDays / 7.0);
-
-            if (score > bestScore) { bestScore = score; best = p.Name; }
-        }
-
-        var chosen = best ?? Places[0].Name;
-        store.RecordMeetupPlace(chosen, today.ToString("yyyy-MM-dd"));
-        return chosen;
-    }
-
-    // Повертає слот-переможець серед сб/нд; при нічиї — жереб серед лідерів. null якщо нема голосів.
-    static (DayOfWeek Day, int Hour, string Text, bool WasTie)? ParseWinnerSlot(Telegram.Bot.Types.Poll poll)
-    {
-        static bool IsSlot(string t) => t.StartsWith("сб ") || t.StartsWith("нд ");
-        var slots = poll.Options.Where(o => IsSlot(o.Text)).ToList();
-        if (slots.Count == 0) return null;
-        var max = slots.Max(o => o.VoterCount);
-        if (max == 0) return null;
-        var winners = slots.Where(o => o.VoterCount == max).ToList();
-        var chosen = winners[Random.Shared.Next(winners.Count)];
-        var parts = chosen.Text.Split(' ');
-        if (parts.Length < 2 || !int.TryParse(parts[1], out var hour)) return null;
-        var day = parts[0] == "нд" ? DayOfWeek.Sunday : DayOfWeek.Saturday;
-        return (day, hour, chosen.Text, winners.Count > 1);
-    }
-
     static List<InputPollOption> BuildVoteOptions() => new()
     {
         new("сб 14"), new("сб 16"), new("сб 18"), new("сб 20"),
         new("нд 14"), new("нд 16"), new("нд 18"), new("нд 20"),
         new(GetRandomEmoji())
     };
-
-    static string BuildVoteResult(Telegram.Bot.Types.Poll poll, (DayOfWeek Day, int Hour, string Text, bool WasTie)? winner)
-    {
-        // Лічимо лише слоти зустрічі (сб/нд). Емодзі-джокер = "не приїду", у результат не входить.
-        static bool IsSlot(string t) => t.StartsWith("сб ") || t.StartsWith("нд ");
-
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine("📊 <b>Результати голосування</b>");
-        sb.AppendLine();
-
-        var slots = poll.Options.Where(o => IsSlot(o.Text)).ToList();
-        foreach (var o in slots)
-            sb.AppendLine($"{System.Net.WebUtility.HtmlEncode(o.Text)} — {o.VoterCount}");
-
-        if (slots.Sum(o => o.VoterCount) == 0)
-        {
-            sb.AppendLine();
-            sb.AppendLine("Ніхто не проголосував 🤷");
-            return sb.ToString().Trim();
-        }
-        var max = slots.Max(o => o.VoterCount);
-        var winners = slots.Where(o => o.VoterCount == max).Select(o => System.Net.WebUtility.HtmlEncode(o.Text)).ToList();
-        sb.AppendLine();
-        if (winners.Count == 1)
-            sb.AppendLine($"Перемагає: <b>{winners[0]}</b> ({max})");
-        else
-        {
-            sb.AppendLine($"Нічия: <b>{string.Join(", ", winners)}</b> ({max})");
-            if (winner is { WasTie: true } w)
-                sb.AppendLine($"Жереб обрав: <b>{System.Net.WebUtility.HtmlEncode(w.Text)}</b>");
-        }
-        return sb.ToString().Trim();
-    }
 
     static string GetRandomEmoji()
     {

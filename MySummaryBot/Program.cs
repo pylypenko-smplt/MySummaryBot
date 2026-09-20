@@ -34,9 +34,6 @@ braveHttpClient.DefaultRequestHeaders.Add("X-Subscription-Token", braveSearchKey
 braveHttpClient.DefaultRequestHeaders.Add("Accept", "application/json");
 var imageSearch = new ImageSearchService(braveHttpClient);
 
-var weatherHttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
-var weather = new WeatherService(weatherHttpClient);
-
 var dbPath = Path.Combine(Environment.GetEnvironmentVariable("DATA_DIR") ?? "/data", "mysummarybot.db");
 using var store = new MessageStore(dbPath);
 
@@ -46,7 +43,7 @@ var transcription = new TranscriptionService(httpClient);
 try
 {
     var botClient = new TelegramBotClient(token);
-    var bot = new BotService(botClient, ai, store, adminChatId, ogHttpClient, imageSearch, weather, transcription);
+    var bot = new BotService(botClient, ai, store, adminChatId, ogHttpClient, imageSearch, transcription);
     var cts = new CancellationTokenSource();
 
     void HandleStopSignal(PosixSignalContext ctx)
